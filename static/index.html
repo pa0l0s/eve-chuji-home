@@ -264,16 +264,35 @@
     }
 
     .login-btn {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
       margin-top: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      background: #0c2233;
+      border: 1px solid #38bdf8;
+      border-radius: 8px;
+      color: #38bdf8;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-decoration: none;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
     }
 
-    .login-btn img {
-      height: 38px;
-      transition: opacity 0.15s;
+    .login-btn:hover {
+      background: #38bdf8;
+      color: #0f1117;
     }
 
-    .login-btn:hover img { opacity: 0.85; }
+    .login-btn:active { transform: translateY(1px); }
+
+    .login-btn svg {
+      width: 18px;
+      height: 18px;
+    }
 
     /* ── Spinner ── */
     .spinner {
@@ -347,7 +366,10 @@
     <div class="login-corp" style="color:#38bdf8">ZLY CHUJI</div>
     <div class="login-sub">Corporation Portal · Members Only</div>
     <a href="/api/auth/login" class="login-btn">
-      <img src="https://web.ccpgames.com/eve-sso/img/eve-sso-login-black-small.png" alt="Login with EVE Online">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 2L4 6v6c0 5 3.5 9.5 8 10 4.5-.5 8-5 8-10V6l-8-4zm0 2.2L18 7v5c0 4-2.7 7.7-6 8.2-3.3-.5-6-4.2-6-8.2V7l6-2.8z"/>
+      </svg>
+      Log in with EVE Online
     </a>
   </div>
 </div>
