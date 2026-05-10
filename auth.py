@@ -19,7 +19,9 @@ SCOPES = " ".join([
 
 
 def _signer() -> URLSafeSerializer:
-    secret = os.getenv("SECRET_KEY", "dev-insecure-key")
+    secret = os.getenv("SECRET_KEY")
+    if not secret:
+        raise RuntimeError("SECRET_KEY environment variable is not set")
     return URLSafeSerializer(secret)
 
 
@@ -74,5 +76,5 @@ def read_session_cookie(cookie: str) -> int | None:
     try:
         data = _signer().loads(cookie)
         return data["cid"]
-    except (BadSignature, KeyError, Exception):
+    except (BadSignature, KeyError):
         return None

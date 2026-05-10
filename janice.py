@@ -56,5 +56,8 @@ async def _fetch_prices(type_id_to_name: dict[int, str]) -> dict[int, float]:
             if type_id and buy_five_pct:
                 result[type_id] = buy_five_pct * 0.90
         return result
-    except Exception:
+    except httpx.HTTPError:
+        return {}
+    except Exception as e:
+        print(f"[janice] unexpected error: {e}")
         return {}

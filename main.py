@@ -14,7 +14,10 @@ from auth import build_login_url, exchange_code, verify_token, make_session_cook
 from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_projects, get_type_name
 from janice import get_prices_for_items
 
-CORP_ID = int(os.getenv("CORP_ID", "0"))
+_corp_id = os.getenv("CORP_ID")
+if not _corp_id:
+    raise RuntimeError("CORP_ID environment variable is not set")
+CORP_ID = int(_corp_id)
 
 
 @asynccontextmanager
