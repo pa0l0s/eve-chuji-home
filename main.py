@@ -13,6 +13,7 @@ import db as database
 from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
 from esi import (
     get_valid_token, get_character, get_wallet, get_skills,
+    get_character_location, get_character_online, get_character_ship,
     get_corp_contracts, get_corp_projects,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_structure_info, get_type_info, get_system_info,
@@ -284,10 +285,13 @@ async def member(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        char_data, wallet, skills = await asyncio.gather(
+        char_data, wallet, skills, location, online, ship = await asyncio.gather(
             get_character(character_id, access_token),
             get_wallet(character_id, access_token),
             get_skills(character_id, access_token),
+            get_character_location(character_id, access_token),
+            get_character_online(character_id, access_token),
+            get_character_ship(character_id, access_token),
         )
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="ESI unavailable")
@@ -299,6 +303,16 @@ async def member(session: str | None = Cookie(None)):
         )
     )
 
+    system_info = await get_system_info(location["solar_system_id"]) if location.get("solar_system_id") else {}
+    docked_name = None
+    if location.get("station_id"):
+        docked_name = await get_location_name(location["station_id"], access_token)
+    elif location.get("structure_id"):
+        info = await get_structure_info(location["structure_id"], access_token)
+        docked_name = info["name"]
+
+    ship_type = await get_type_info(ship["ship_type_id"]) if ship.get("ship_type_id") else {}
+
     return {
         "character_id": character_id,
         "character_name": char_data.get("name"),
@@ -307,6 +321,23 @@ async def member(session: str | None = Cookie(None)):
         "wallet_balance": wallet,
         "total_sp": skills.get("total_sp", 0),
         "training_active": training_active,
+        "location": {
+            "system_id": location.get("solar_system_id"),
+            "system_name": system_info.get("name"),
+            "system_security": system_info.get("security_status"),
+            "docked_at": docked_name,
+        },
+        "online": {
+            "is_online": online.get("online", False),
+            "last_login": online.get("last_login"),
+            "last_logout": online.get("last_logout"),
+            "logins": online.get("logins"),
+        },
+        "ship": {
+            "type_id": ship.get("ship_type_id"),
+            "type_name": ship_type.get("name"),
+            "name": ship.get("ship_name"),
+        },
     }
 
 

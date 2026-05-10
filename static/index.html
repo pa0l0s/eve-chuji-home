@@ -942,11 +942,27 @@
   }
 
   function renderMember(m) {
-    const secColor = m.security_status >= 0 ? '#4ade80' : '#f87171';
+    const secStatColor = m.security_status >= 0 ? '#4ade80' : '#f87171';
     const secSign  = m.security_status >= 0 ? '+' : '';
     const trainingBadge = m.training_active
       ? '<span class="badge badge-green">Training</span>'
       : '<span class="badge badge-muted">Idle</span>';
+
+    const onlineDot = m.online?.is_online
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;margin-right:0.4rem"></span>'
+      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#475569;margin-right:0.4rem"></span>';
+    const onlineLabel = m.online?.is_online ? 'Online' : 'Offline';
+
+    const sysSec = m.location?.system_security;
+    const sysSecText = (typeof sysSec === 'number')
+      ? ` <span style="color:${secColor(sysSec)}">${sysSec.toFixed(1)}</span>` : '';
+    const dockedRow = m.location?.docked_at
+      ? `<div class="metric"><div class="label">Docked at</div>
+           <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">${escHtml(m.location.docked_at)}</div>
+         </div>`
+      : `<div class="metric"><div class="label">Status</div>
+           <div style="font-size:0.95rem;color:#94a3b8;font-weight:600">In Space</div>
+         </div>`;
 
     document.getElementById('member-grid').innerHTML = `
       <div class="card">
@@ -957,12 +973,48 @@
           <div class="char-info">
             <div class="name">${escHtml(m.character_name)}</div>
             <div class="corp" id="corp-name-display">Corp ID: ${m.corporation_id}</div>
-            <div class="sec-status" style="color:${secColor}">
+            <div class="sec-status" style="color:${secStatColor}">
               Security Status: ${secSign}${m.security_status.toFixed(1)}
+            </div>
+            <div style="font-size:0.8rem;color:#94a3b8;margin-top:0.4rem">
+              ${onlineDot}${onlineLabel}
             </div>
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title">Location &amp; Ship</div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="label">Solar System</div>
+            <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">
+              ${escHtml(m.location?.system_name || '–')}${sysSecText}
+            </div>
+          </div>
+          ${dockedRow}
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.75rem;
+                    background:#252a3d;border-radius:8px;padding:0.6rem 0.75rem">
+          ${m.ship?.type_id
+            ? `<img src="https://images.evetech.net/types/${m.ship.type_id}/render?size=64"
+                    alt="" style="width:48px;height:48px;border-radius:4px;background:#1e2130">`
+            : ''}
+          <div style="flex:1;min-width:0">
+            <div style="font-size:0.7rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">
+              Active Ship
+            </div>
+            <div style="font-size:0.9rem;color:#e2e8f0;font-weight:600;
+                        white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+              ${escHtml(m.ship?.name || '–')}
+            </div>
+            <div style="font-size:0.75rem;color:#94a3b8">
+              ${escHtml(m.ship?.type_name || '')}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">Financials &amp; Skills</div>
         <div class="metrics">
@@ -978,6 +1030,21 @@
         <div style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;
                     text-transform:uppercase;letter-spacing:0.06em">
           Skill Queue &nbsp; ${trainingBadge}
+        </div>
+        <div style="margin-top:0.75rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;
+                    font-size:0.7rem;color:#64748b">
+          <div>
+            <div style="text-transform:uppercase;letter-spacing:0.06em">Last Login</div>
+            <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
+              ${m.online?.last_login ? new Date(m.online.last_login).toLocaleString() : '–'}
+            </div>
+          </div>
+          <div>
+            <div style="text-transform:uppercase;letter-spacing:0.06em">Total Logins</div>
+            <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
+              ${m.online?.logins != null ? fmtNum(m.online.logins) : '–'}
+            </div>
+          </div>
         </div>
       </div>`;
 
