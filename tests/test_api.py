@@ -60,6 +60,11 @@ async def test_contracts_returns_401_without_auth(client):
     assert r.status_code == 401
 
 
+async def test_projects_returns_401_without_auth(client):
+    r = await client.get("/api/projects")
+    assert r.status_code == 401
+
+
 async def test_member_returns_401_without_auth(client):
     r = await client.get("/api/member")
     assert r.status_code == 401

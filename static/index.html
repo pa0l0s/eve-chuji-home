@@ -359,6 +359,7 @@
     <span class="nav-corp">ZLY CHUJI</span>
     <div class="nav-links">
       <button class="nav-btn active" id="btn-contracts" onclick="showView('contracts')">Contracts</button>
+      <button class="nav-btn" id="btn-projects" onclick="showView('projects')">Projects</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
     </div>
     <div class="nav-right">
@@ -389,6 +390,22 @@
       <div id="pane-hauling" class="contract-pane"></div>
       <div id="pane-abyssal" class="contract-pane hidden"></div>
       <div id="pane-others"  class="contract-pane hidden"></div>
+    </div>
+
+    <!-- Projects view -->
+    <div id="view-projects" class="hidden">
+      <div id="projects-error" class="banner"></div>
+      <div class="page-title">Corporation Projects</div>
+      <div class="tab-strip">
+        <button class="tab-btn active" id="tab-active" onclick="showProjectTab('active')">
+          Active <span class="tab-count" id="count-active">0</span>
+        </button>
+        <button class="tab-btn" id="tab-closed" onclick="showProjectTab('closed')">
+          Closed <span class="tab-count" id="count-closed">0</span>
+        </button>
+      </div>
+      <div id="pane-active" class="contract-pane"></div>
+      <div id="pane-closed" class="contract-pane hidden"></div>
     </div>
 
     <!-- Member view -->
@@ -429,11 +446,12 @@
   }
 
   function showView(view) {
-    document.getElementById('view-contracts').classList.toggle('hidden', view !== 'contracts');
-    document.getElementById('view-member').classList.toggle('hidden', view !== 'member');
-    document.getElementById('btn-contracts').classList.toggle('active', view === 'contracts');
-    document.getElementById('btn-member').classList.toggle('active', view === 'member');
+    ['contracts', 'projects', 'member'].forEach(v => {
+      document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
+      document.getElementById('btn-' + v).classList.toggle('active', view === v);
+    });
     if (view === 'contracts') loadContracts();
+    if (view === 'projects') loadProjects();
     if (view === 'member') loadMember();
   }
 
@@ -560,6 +578,88 @@
     // Shorten "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4"
     const parts = name.split(' - ');
     return parts.length > 2 ? parts.slice(0, 2).join(' - ') : name;
+  }
+
+  // ── Projects ──────────────────────────────────────────────────────────────
+
+  let projectsTimer = null;
+
+  async function loadProjects() {
+    if (projectsTimer) clearTimeout(projectsTimer);
+    try {
+      const r = await fetch('/api/projects');
+      if (!r.ok) {
+        showError('projects-error', r.status === 403
+          ? 'Insufficient corporation roles to view projects.'
+          : 'ESI unavailable — projects could not be loaded.');
+        return;
+      }
+      hideError('projects-error');
+      renderProjects(await r.json());
+    } catch {
+      showError('projects-error', 'Network error — could not load projects.');
+    }
+    projectsTimer = setTimeout(loadProjects, 120000);
+  }
+
+  function showProjectTab(tab) {
+    ['active', 'closed'].forEach(t => {
+      document.getElementById('pane-' + t).classList.toggle('hidden', t !== tab);
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    });
+  }
+
+  function renderProjects(data) {
+    const { active = [], closed = [] } = data;
+    document.getElementById('count-active').textContent = active.length;
+    document.getElementById('count-closed').textContent = closed.length;
+    document.getElementById('pane-active').innerHTML = projectListHtml(active, 'No active projects.');
+    document.getElementById('pane-closed').innerHTML = projectListHtml(closed, 'No closed projects.');
+  }
+
+  function projectListHtml(projects, emptyMsg) {
+    if (!projects.length) return `<p class="contract-empty">${emptyMsg}</p>`;
+    return `<div class="layout">${projects.map(projectCard).join('')}</div>`;
+  }
+
+  function projectCard(p) {
+    const cur = p.progress?.current ?? 0;
+    const des = p.progress?.desired ?? 0;
+    const pct = des > 0 ? Math.min(100, (cur / des) * 100) : 0;
+    const reward = p.reward
+      ? `<div class="metric">
+           <div class="label">Reward Pool</div>
+           <div class="val">${fmtISK(p.reward.remaining || 0)}<span class="unit">/ ${fmtISK(p.reward.initial || 0)} ISK</span></div>
+         </div>`
+      : '';
+    return `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:0.5rem;margin-bottom:0.75rem">
+          <div style="font-size:0.95rem;font-weight:600;color:#f8fafc">${escHtml(p.name)}</div>
+          ${stateBadge(p.state)}
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-label">
+            <span>Progress</span>
+            <span>${fmtNum(cur)} / ${fmtNum(des)}</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>
+        ${reward}
+        <div style="margin-top:0.75rem;font-size:0.7rem;color:#475569">
+          Last modified: ${new Date(p.last_modified).toLocaleDateString()}
+        </div>
+      </div>`;
+  }
+
+  function stateBadge(state) {
+    const cls = {
+      Active: 'badge-green',
+      Completed: 'badge-blue',
+      Closed: 'badge-muted',
+      Expired: 'badge-orange',
+    }[state] || 'badge-muted';
+    return `<span class="badge ${cls}">${escHtml(state || '')}</span>`;
   }
 
   // ── Member ────────────────────────────────────────────────────────────────

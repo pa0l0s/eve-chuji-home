@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 import db as database
 from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_location_name
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name
 
 _corp_id = os.getenv("CORP_ID")
 if not _corp_id:
@@ -146,6 +146,26 @@ async def contracts(session: str | None = Cookie(None)):
         c["end_name"]   = loc_names.get(c.get("end_location_id"),   str(c.get("end_location_id", "")))
 
     return {"hauling": hauling, "abyssal": abyssal, "others": others}
+
+
+@app.get("/api/projects")
+async def projects(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        raw = await get_corp_projects(CORP_ID, access_token)
+    except httpx.HTTPStatusError as e:
+        print(f"ESI projects HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Insufficient corporation roles")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        print(f"ESI projects connection error: {e}")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+
+    active = [p for p in raw if p.get("state") == "Active"]
+    closed = [p for p in raw if p.get("state") in ("Completed", "Closed", "Expired")]
+    return {"active": active, "closed": closed}
 
 
 @app.get("/api/member")

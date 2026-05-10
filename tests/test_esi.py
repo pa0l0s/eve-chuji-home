@@ -3,7 +3,7 @@ import pytest
 import respx
 from httpx import Response
 from db import init_db, upsert_token
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_location_name
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name
 
 
 @pytest.fixture(autouse=True)
@@ -105,6 +105,24 @@ async def test_get_corp_contracts():
     result = await get_corp_contracts(98340844, "acc_token")
     assert len(result) == 1
     assert result[0]["type"] == "courier"
+
+
+@respx.mock
+async def test_get_corp_projects():
+    respx.get("https://esi.evetech.net/latest/corporations/98340844/projects").mock(
+        return_value=Response(200, json={
+            "projects": [
+                {"id": "abc-123", "name": "Deliver Tritanium", "state": "Active",
+                 "last_modified": "2026-05-01T00:00:00Z",
+                 "progress": {"current": 50, "desired": 100},
+                 "reward": {"initial": 10000000.0, "remaining": 5000000.0}}
+            ]
+        })
+    )
+    result = await get_corp_projects(98340844, "acc_token")
+    assert len(result) == 1
+    assert result[0]["name"] == "Deliver Tritanium"
+    assert result[0]["progress"]["current"] == 50
 
 
 @respx.mock

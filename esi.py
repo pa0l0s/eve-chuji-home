@@ -99,6 +99,29 @@ async def get_corp_contracts(corporation_id: int, access_token: str) -> list:
     return result
 
 
+async def get_corp_projects(corporation_id: int, access_token: str) -> list:
+    # Projects API requires compatibility_date >= 2026-01-01.
+    result = []
+    cursor = None
+    async with httpx.AsyncClient() as client:
+        while True:
+            params = {"compatibility_date": "2026-01-01", "limit": 100}
+            if cursor:
+                params["after"] = cursor
+            r = await client.get(
+                f"{ESI_BASE}/corporations/{corporation_id}/projects",
+                params=params,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            data = r.json()
+            result.extend(data.get("projects", []))
+            cursor = data.get("cursor", {}).get("after")
+            if not cursor:
+                break
+    return result
+
+
 async def get_location_name(location_id: int, access_token: str) -> str:
     async with httpx.AsyncClient() as client:
         try:
