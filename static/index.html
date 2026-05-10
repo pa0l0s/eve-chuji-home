@@ -382,6 +382,7 @@
     <div class="nav-links">
       <button class="nav-btn active" id="btn-contracts" onclick="showView('contracts')">Contracts</button>
       <button class="nav-btn" id="btn-projects" onclick="showView('projects')">Projects</button>
+      <button class="nav-btn" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
     </div>
     <div class="nav-right">
@@ -430,6 +431,22 @@
       <div id="pane-closed" class="contract-pane hidden"></div>
     </div>
 
+    <!-- Structures view -->
+    <div id="view-structures" class="hidden">
+      <div id="structures-error" class="banner"></div>
+      <div class="page-title">Corporation Structures</div>
+      <div class="tab-strip">
+        <button class="tab-btn active" id="tab-citadels" onclick="showStructuresTab('citadels')">
+          Citadels <span class="tab-count" id="count-citadels">0</span>
+        </button>
+        <button class="tab-btn" id="tab-poses" onclick="showStructuresTab('poses')">
+          POSes <span class="tab-count" id="count-poses">0</span>
+        </button>
+      </div>
+      <div id="pane-citadels" class="contract-pane"></div>
+      <div id="pane-poses" class="contract-pane hidden"></div>
+    </div>
+
     <!-- Member view -->
     <div id="view-member" class="hidden">
       <div id="member-error" class="banner"></div>
@@ -468,12 +485,13 @@
   }
 
   function showView(view) {
-    ['contracts', 'projects', 'member'].forEach(v => {
+    ['contracts', 'projects', 'structures', 'member'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
     if (view === 'contracts') loadContracts();
     if (view === 'projects') loadProjects();
+    if (view === 'structures') loadStructures();
     if (view === 'member') loadMember();
   }
 
@@ -537,9 +555,9 @@
             ${hauling.map(c => `
               <tr>
                 <td style="color:#e2e8f0">
-                  ${escHtml(shortLoc(c.start_name))}
+                  ${locWithType(c.start_name, c.start_type)}
                   <span style="color:#475569"> → </span>
-                  ${escHtml(shortLoc(c.end_name))}
+                  ${locWithType(c.end_name, c.end_type)}
                   ${issuerLine(c)}
                 </td>
                 <td>${fmtNum(Math.round(c.volume || 0))} m³</td>
@@ -628,6 +646,201 @@
     // Shorten "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4"
     const parts = name.split(' - ');
     return parts.length > 2 ? parts.slice(0, 2).join(' - ') : name;
+  }
+
+  function locWithType(name, type) {
+    const typeBadge = type
+      ? ` <span class="badge badge-muted" style="margin-left:0.25rem">${escHtml(type)}</span>`
+      : '';
+    return escHtml(shortLoc(name)) + typeBadge;
+  }
+
+  // ── Structures ────────────────────────────────────────────────────────────
+
+  async function loadStructures() {
+    try {
+      const r = await fetch('/api/structures');
+      if (!r.ok) {
+        showError('structures-error', r.status === 403
+          ? 'Insufficient corporation roles to view structures.'
+          : 'ESI unavailable — structures could not be loaded.');
+        return;
+      }
+      hideError('structures-error');
+      renderStructures(await r.json());
+    } catch {
+      showError('structures-error', 'Network error — could not load structures.');
+    }
+  }
+
+  function showStructuresTab(tab) {
+    ['citadels', 'poses'].forEach(t => {
+      document.getElementById('pane-' + t).classList.toggle('hidden', t !== tab);
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    });
+  }
+
+  function renderStructures(data) {
+    const { citadels = [], starbases = [] } = data;
+    document.getElementById('count-citadels').textContent = citadels.length;
+    document.getElementById('count-poses').textContent = starbases.length;
+    document.getElementById('pane-citadels').innerHTML = citadelsTable(citadels);
+    document.getElementById('pane-poses').innerHTML = posesTable(starbases);
+  }
+
+  function citadelsTable(list) {
+    if (!list.length) return '<p class="contract-empty">No citadels.</p>';
+    return `
+      <div class="card full">
+        <table>
+          <thead><tr>
+            <th>Name</th><th>Type</th><th>System</th><th>State</th><th>Fuel Expires</th>
+          </tr></thead>
+          <tbody>
+            ${list.map(s => `
+              <tr>
+                <td style="color:#e2e8f0">${escHtml(s.name || ('Citadel #' + (s.structure_id || '')))}</td>
+                <td><span class="badge badge-blue">${escHtml(s.type_name || '–')}</span></td>
+                <td>${systemCell(s)}</td>
+                <td>${citadelStateBadge(s.state)}</td>
+                <td>${fuelExpires(s.fuel_expires)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function posesTable(list) {
+    if (!list.length) return '<p class="contract-empty">No POSes.</p>';
+    return `
+      <div class="card full">
+        <table>
+          <thead><tr>
+            <th>Type</th><th>System</th><th>State</th><th>Online Since</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${list.map((s, i) => `
+              <tr id="pos-row-${i}" style="cursor:pointer" onclick="togglePosDetail(${i}, ${s.starbase_id}, ${s.system_id})">
+                <td style="color:#e2e8f0">${escHtml(s.type_name || ('Type #' + (s.type_id || '')))}</td>
+                <td>${systemCell(s)}</td>
+                <td>${posStateBadge(s.state)}</td>
+                <td>${s.onlined_since ? new Date(s.onlined_since).toLocaleDateString() : '–'}</td>
+                <td style="color:#475569;font-size:0.7rem">▼</td>
+              </tr>
+              <tr id="pos-detail-${i}" class="hidden"><td colspan="5" style="background:#181b27;padding:0.75rem"></td></tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  }
+
+  function systemCell(s) {
+    const sec = (typeof s.security_status === 'number') ? ` <span style="color:${secColor(s.security_status)}">${s.security_status.toFixed(1)}</span>` : '';
+    return `${escHtml(s.system_name || 'System #' + (s.system_id || ''))}${sec}`;
+  }
+
+  function secColor(v) {
+    if (v >= 0.5) return '#4ade80';
+    if (v >  0.0) return '#fb923c';
+    return '#f87171';
+  }
+
+  function citadelStateBadge(state) {
+    const map = {
+      shield_vulnerable: ['badge-green', 'Vulnerable'],
+      armor_reinforce:   ['badge-orange', 'Armor RF'],
+      armor_vulnerable:  ['badge-orange', 'Armor Vuln'],
+      hull_reinforce:    ['badge-orange', 'Hull RF'],
+      hull_vulnerable:   ['badge-orange', 'Hull Vuln'],
+      online_deprecated: ['badge-blue', 'Online'],
+      onlining_vulnerable: ['badge-blue', 'Onlining'],
+      anchoring_vulnerable: ['badge-muted', 'Anchoring'],
+      unanchoring_vulnerable: ['badge-muted', 'Unanchoring'],
+      unanchored: ['badge-muted', 'Unanchored'],
+    };
+    const [cls, label] = map[state] || ['badge-muted', state || '–'];
+    return `<span class="badge ${cls}">${escHtml(label)}</span>`;
+  }
+
+  function posStateBadge(state) {
+    const map = {
+      online: 'badge-green',
+      onlining: 'badge-blue',
+      offline: 'badge-muted',
+      reinforced: 'badge-orange',
+      unanchoring: 'badge-muted',
+    };
+    return `<span class="badge ${map[state] || 'badge-muted'}">${escHtml(state || '–')}</span>`;
+  }
+
+  function fuelExpires(iso) {
+    if (!iso) return '<span style="color:#475569">–</span>';
+    const diff = new Date(iso) - Date.now();
+    const days = Math.floor(diff / 86400000);
+    const color = days < 3 ? '#f87171' : days < 7 ? '#fb923c' : '#94a3b8';
+    return `<span style="color:${color}">${days < 0 ? 'Expired' : days + 'd'}</span>`;
+  }
+
+  async function togglePosDetail(idx, starbaseId, systemId) {
+    const row = document.getElementById('pos-detail-' + idx);
+    if (!row.classList.contains('hidden')) {
+      row.classList.add('hidden');
+      return;
+    }
+    const cell = row.querySelector('td');
+    cell.innerHTML = '<span style="color:#475569">Loading…</span>';
+    row.classList.remove('hidden');
+    try {
+      const r = await fetch(`/api/starbases/${starbaseId}?system_id=${systemId}`);
+      if (!r.ok) {
+        cell.innerHTML = '<span style="color:#f87171">Failed to load detail.</span>';
+        return;
+      }
+      cell.innerHTML = renderPosDetail(await r.json());
+    } catch {
+      cell.innerHTML = '<span style="color:#f87171">Network error.</span>';
+    }
+  }
+
+  function renderPosDetail(d) {
+    const fuels = (d.fuels || []).map(f =>
+      `<div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:0.2rem 0">
+         <span>${escHtml(f.type_name || 'Type #' + f.type_id)}</span>
+         <span style="color:#38bdf8">${fmtNum(f.quantity)}</span>
+       </div>`).join('') || '<div style="color:#475569;font-size:0.8rem">No fuel data.</div>';
+
+    const access = [
+      ['Anchor', d.anchor],
+      ['Unanchor', d.unanchor],
+      ['Online', d.online],
+      ['Offline', d.offline],
+      ['Fuel View', d.fuel_bay_view],
+      ['Fuel Take', d.fuel_bay_take],
+    ].map(([k, v]) =>
+      `<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#94a3b8;padding:0.15rem 0">
+         <span style="color:#64748b">${k}</span><span>${escHtml(v || '–')}</span>
+       </div>`).join('');
+
+    const flags = [
+      d.allow_alliance_members && 'Alliance allowed',
+      d.allow_corporation_members && 'Corp allowed',
+      d.attack_if_at_war && 'Attack if at war',
+      d.attack_if_other_security_status_dropping && 'Attack on sec drop',
+    ].filter(Boolean).map(t =>
+      `<span class="badge badge-muted" style="margin-right:0.3rem">${t}</span>`).join('');
+
+    return `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+        <div>
+          <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Fuel Bay</div>
+          ${fuels}
+        </div>
+        <div>
+          <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Access Control</div>
+          ${access}
+        </div>
+      </div>
+      <div style="margin-top:0.75rem">${flags}</div>`;
   }
 
   // ── Projects ──────────────────────────────────────────────────────────────

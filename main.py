@@ -11,7 +11,13 @@ from fastapi.staticfiles import StaticFiles
 
 import db as database
 from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name, resolve_names
+from esi import (
+    get_valid_token, get_character, get_wallet, get_skills,
+    get_corp_contracts, get_corp_projects,
+    get_corp_structures, get_corp_starbases, get_starbase_detail,
+    get_location_name, get_structure_info, get_type_info, get_system_info,
+    resolve_names,
+)
 
 _corp_id = os.getenv("CORP_ID")
 if not _corp_id:
@@ -134,20 +140,39 @@ async def contracts(session: str | None = Cookie(None)):
     abyssal = [c for c in active if c.get("type") == "auction"]
     others  = [c for c in active if c.get("type") not in ("courier", "auction")]
 
-    # Resolve location names for hauling contracts and character names for issuer/acceptor
+    # Resolve location info for hauling and character names for issuer/acceptor.
     loc_ids = {c.get("start_location_id") for c in hauling} | {c.get("end_location_id") for c in hauling}
     loc_ids.discard(None)
     char_ids = [c.get(k) for c in active for k in ("issuer_id", "acceptor_id") if c.get(k)]
 
-    loc_names_list, char_names = await asyncio.gather(
-        asyncio.gather(*[get_location_name(lid, access_token) for lid in loc_ids]),
+    structure_ids = [lid for lid in loc_ids if lid >= 1_000_000_000_000]
+    station_ids   = [lid for lid in loc_ids if lid <  1_000_000_000_000]
+
+    structures_info, station_names_list, char_names = await asyncio.gather(
+        asyncio.gather(*[get_structure_info(sid, access_token) for sid in structure_ids]),
+        asyncio.gather(*[get_location_name(sid, access_token) for sid in station_ids]),
         resolve_names(char_ids),
     )
-    loc_names = dict(zip(loc_ids, loc_names_list))
+    loc_names: dict[int, str] = {}
+    loc_types: dict[int, int | None] = {}
+    for sid, info in zip(structure_ids, structures_info):
+        loc_names[sid] = info["name"]
+        loc_types[sid] = info.get("type_id")
+    for sid, name in zip(station_ids, station_names_list):
+        loc_names[sid] = name
+
+    needed_type_ids = {tid for tid in loc_types.values() if tid}
+    type_names: dict[int, str] = {}
+    if needed_type_ids:
+        type_infos = await asyncio.gather(*[get_type_info(t) for t in needed_type_ids])
+        type_names = {tid: info["name"] for tid, info in zip(needed_type_ids, type_infos)}
 
     for c in hauling:
-        c["start_name"] = loc_names.get(c.get("start_location_id"), str(c.get("start_location_id", "")))
-        c["end_name"]   = loc_names.get(c.get("end_location_id"),   str(c.get("end_location_id", "")))
+        sid_a, sid_b = c.get("start_location_id"), c.get("end_location_id")
+        c["start_name"] = loc_names.get(sid_a, str(sid_a or ""))
+        c["end_name"]   = loc_names.get(sid_b, str(sid_b or ""))
+        c["start_type"] = type_names.get(loc_types.get(sid_a))
+        c["end_type"]   = type_names.get(loc_types.get(sid_b))
     for c in active:
         if c.get("issuer_id"):
             c["issuer_name"] = char_names.get(c["issuer_id"])
@@ -175,6 +200,75 @@ async def projects(session: str | None = Cookie(None)):
     active = [p for p in raw if p.get("state") == "Active"]
     closed = [p for p in raw if p.get("state") in ("Completed", "Closed", "Expired")]
     return {"active": active, "closed": closed}
+
+
+@app.get("/api/structures")
+async def structures(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        citadels, starbases = await asyncio.gather(
+            get_corp_structures(CORP_ID, access_token),
+            get_corp_starbases(CORP_ID, access_token),
+        )
+    except httpx.HTTPStatusError as e:
+        print(f"ESI structures HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Insufficient corporation roles")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        print(f"ESI structures connection error: {e}")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+
+    type_ids   = {s.get("type_id") for s in citadels} | {s.get("type_id") for s in starbases}
+    system_ids = {s.get("system_id") for s in citadels} | {s.get("system_id") for s in starbases}
+    type_ids.discard(None)
+    system_ids.discard(None)
+
+    types_list, systems_list = await asyncio.gather(
+        asyncio.gather(*[get_type_info(t) for t in type_ids]),
+        asyncio.gather(*[get_system_info(s) for s in system_ids]),
+    )
+    types   = dict(zip(type_ids, types_list))
+    systems = dict(zip(system_ids, systems_list))
+
+    for s in citadels + starbases:
+        t = types.get(s.get("type_id"))
+        sy = systems.get(s.get("system_id"))
+        if t:
+            s["type_name"] = t["name"]
+        if sy:
+            s["system_name"] = sy["name"]
+            s["security_status"] = sy.get("security_status")
+
+    return {"citadels": citadels, "starbases": starbases}
+
+
+@app.get("/api/starbases/{starbase_id}")
+async def starbase_detail(starbase_id: int, system_id: int,
+                          session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        detail = await get_starbase_detail(CORP_ID, starbase_id, system_id, access_token)
+    except httpx.HTTPStatusError as e:
+        print(f"ESI starbase detail HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Insufficient corporation roles")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        print(f"ESI starbase detail connection error: {e}")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+
+    fuel_type_ids = [f.get("type_id") for f in detail.get("fuels") or [] if f.get("type_id")]
+    if fuel_type_ids:
+        fuel_types_list = await asyncio.gather(*[get_type_info(t) for t in fuel_type_ids])
+        fuel_types = dict(zip(fuel_type_ids, fuel_types_list))
+        for f in detail["fuels"]:
+            t = fuel_types.get(f.get("type_id"))
+            if t:
+                f["type_name"] = t["name"]
+    return detail
 
 
 @app.get("/api/member")

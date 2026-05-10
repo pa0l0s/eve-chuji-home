@@ -3,7 +3,12 @@ import pytest
 import respx
 from httpx import Response
 from db import init_db, upsert_token
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name, resolve_names
+from esi import (
+    get_valid_token, get_character, get_wallet, get_skills,
+    get_corp_contracts, get_corp_projects,
+    get_corp_structures, get_corp_starbases, get_starbase_detail,
+    get_location_name, get_type_info, get_system_info, resolve_names,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -172,3 +177,69 @@ async def test_get_location_name_structure_fallback_label():
     )
     name = await get_location_name(1099999999999, "acc_token")
     assert name.startswith("Citadel #")
+
+
+@respx.mock
+async def test_get_type_info():
+    respx.get("https://esi.evetech.net/latest/universe/types/35832/").mock(
+        return_value=Response(200, json={"name": "Astrahus", "group_id": 1657})
+    )
+    info = await get_type_info(35832)
+    assert info["name"] == "Astrahus"
+    assert info["group_id"] == 1657
+
+
+@respx.mock
+async def test_get_system_info():
+    respx.get("https://esi.evetech.net/latest/universe/systems/30000142/").mock(
+        return_value=Response(200, json={"name": "Jita", "security_status": 0.946})
+    )
+    info = await get_system_info(30000142)
+    assert info["name"] == "Jita"
+    assert info["security_status"] == pytest.approx(0.946)
+
+
+@respx.mock
+async def test_get_corp_structures():
+    respx.get("https://esi.evetech.net/latest/corporations/98340844/structures/").mock(
+        return_value=Response(200, json=[
+            {"structure_id": 1046603361682, "type_id": 35832, "system_id": 30000142,
+             "corporation_id": 98340844, "name": "ZLY CHUJI - HQ", "state": "shield_vulnerable",
+             "profile_id": 1, "reinforce_hour": 18}
+        ], headers={"X-Pages": "1"})
+    )
+    result = await get_corp_structures(98340844, "acc_token")
+    assert len(result) == 1
+    assert result[0]["type_id"] == 35832
+
+
+@respx.mock
+async def test_get_corp_starbases():
+    respx.get("https://esi.evetech.net/latest/corporations/98340844/starbases/").mock(
+        return_value=Response(200, json=[
+            {"starbase_id": 1234567, "type_id": 12235, "system_id": 30000142, "state": "online"}
+        ], headers={"X-Pages": "1"})
+    )
+    result = await get_corp_starbases(98340844, "acc_token")
+    assert len(result) == 1
+    assert result[0]["type_id"] == 12235
+
+
+@respx.mock
+async def test_get_starbase_detail():
+    respx.get("https://esi.evetech.net/latest/corporations/98340844/starbases/1234567/").mock(
+        return_value=Response(200, json={
+            "allow_alliance_members": True, "allow_corporation_members": True,
+            "anchor": "config_starbase_equipment_role",
+            "attack_if_at_war": True, "attack_if_other_security_status_dropping": False,
+            "fuel_bay_take": "config_starbase_equipment_role",
+            "fuel_bay_view": "corporation_member",
+            "offline": "config_starbase_equipment_role",
+            "online": "config_starbase_equipment_role",
+            "unanchor": "config_starbase_equipment_role",
+            "use_alliance_standings": False,
+            "fuels": [{"type_id": 4051, "quantity": 14400}],
+        })
+    )
+    detail = await get_starbase_detail(98340844, 1234567, 30000142, "acc_token")
+    assert detail["fuels"][0]["quantity"] == 14400

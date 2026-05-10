@@ -3,7 +3,13 @@ import time
 import base64
 import httpx
 
-from db import get_token, upsert_token, get_cached_structure, cache_structure_name, list_all_character_ids
+from db import (
+    get_token, upsert_token,
+    get_cached_structure, cache_structure_name,
+    get_cached_type, cache_type,
+    get_cached_system, cache_system,
+    list_all_character_ids,
+)
 
 ESI_BASE = "https://esi.evetech.net/latest"
 EVE_SSO_TOKEN_URL = "https://login.eveonline.com/v2/oauth/token"
@@ -136,7 +142,7 @@ async def resolve_names(ids: list[int]) -> dict[int, str]:
             return {}
 
 
-async def _fetch_structure(structure_id: int, access_token: str) -> str | None:
+async def _fetch_structure(structure_id: int, access_token: str) -> dict | None:
     async with httpx.AsyncClient() as client:
         try:
             r = await client.get(
@@ -144,13 +150,44 @@ async def _fetch_structure(structure_id: int, access_token: str) -> str | None:
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             r.raise_for_status()
-            return r.json().get("name")
+            data = r.json()
+            return {
+                "name": data.get("name"),
+                "type_id": data.get("type_id"),
+                "system_id": data.get("solar_system_id"),
+            }
         except httpx.HTTPError:
             return None
 
 
+async def get_structure_info(structure_id: int, access_token: str) -> dict:
+    """Returns {name, type_id, system_id} for a citadel. Caches successful lookups."""
+    cached = await get_cached_structure(structure_id)
+    if cached and cached.get("name"):
+        return cached
+
+    info = await _fetch_structure(structure_id, access_token)
+    if not info or not info.get("name"):
+        for char_id in await list_all_character_ids():
+            try:
+                other = await get_valid_token(char_id)
+            except Exception:
+                continue
+            if other == access_token:
+                continue
+            info = await _fetch_structure(structure_id, other)
+            if info and info.get("name"):
+                break
+
+    if info and info.get("name"):
+        await cache_structure_name(
+            structure_id, info["name"], info.get("type_id"), info.get("system_id")
+        )
+        return info
+    return {"name": f"Citadel #{str(structure_id)[-5:]}", "type_id": None, "system_id": None}
+
+
 async def get_location_name(location_id: int, access_token: str) -> str:
-    # NPC stations: public, no auth.
     if location_id < 1_000_000_000_000:
         async with httpx.AsyncClient() as client:
             try:
@@ -159,26 +196,89 @@ async def get_location_name(location_id: int, access_token: str) -> str:
                 return r.json().get("name", "Unknown station")
             except httpx.HTTPError:
                 return f"Station #{str(location_id)[-5:]}"
+    info = await get_structure_info(location_id, access_token)
+    return info["name"]
 
-    # Player citadel: cache → caller's token → other corp members' tokens.
-    cached = await get_cached_structure(location_id)
+
+async def get_type_info(type_id: int) -> dict:
+    """Public ESI; returns {name, group_id}. Cached."""
+    cached = await get_cached_type(type_id)
     if cached:
         return cached
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/universe/types/{type_id}/")
+            r.raise_for_status()
+            data = r.json()
+            name = data.get("name", f"Type #{type_id}")
+            group_id = data.get("group_id")
+            await cache_type(type_id, name, group_id)
+            return {"name": name, "group_id": group_id}
+        except httpx.HTTPError:
+            return {"name": f"Type #{type_id}", "group_id": None}
 
-    name = await _fetch_structure(location_id, access_token)
-    if not name:
-        for char_id in await list_all_character_ids():
-            try:
-                other = await get_valid_token(char_id)
-            except Exception:
-                continue
-            if other == access_token:
-                continue
-            name = await _fetch_structure(location_id, other)
-            if name:
+
+async def get_system_info(system_id: int) -> dict:
+    """Public ESI; returns {name, security_status}. Cached."""
+    cached = await get_cached_system(system_id)
+    if cached:
+        return cached
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/universe/systems/{system_id}/")
+            r.raise_for_status()
+            data = r.json()
+            name = data.get("name", f"System #{system_id}")
+            sec = data.get("security_status")
+            await cache_system(system_id, name, sec)
+            return {"name": name, "security_status": sec}
+        except httpx.HTTPError:
+            return {"name": f"System #{system_id}", "security_status": None}
+
+
+async def get_corp_structures(corporation_id: int, access_token: str) -> list:
+    result = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/corporations/{corporation_id}/structures/",
+                params={"datasource": "tranquility", "page": page},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            result.extend(r.json())
+            if page >= int(r.headers.get("X-Pages", 1)):
                 break
+            page += 1
+    return result
 
-    if name:
-        await cache_structure_name(location_id, name)
-        return name
-    return f"Citadel #{str(location_id)[-5:]}"
+
+async def get_corp_starbases(corporation_id: int, access_token: str) -> list:
+    result = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/corporations/{corporation_id}/starbases/",
+                params={"datasource": "tranquility", "page": page},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            result.extend(r.json())
+            if page >= int(r.headers.get("X-Pages", 1)):
+                break
+            page += 1
+    return result
+
+
+async def get_starbase_detail(corporation_id: int, starbase_id: int,
+                              system_id: int, access_token: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/corporations/{corporation_id}/starbases/{starbase_id}/",
+            params={"datasource": "tranquility", "system_id": system_id},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()

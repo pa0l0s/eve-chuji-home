@@ -65,6 +65,16 @@ async def test_projects_returns_401_without_auth(client):
     assert r.status_code == 401
 
 
+async def test_structures_returns_401_without_auth(client):
+    r = await client.get("/api/structures")
+    assert r.status_code == 401
+
+
+async def test_starbase_detail_returns_401_without_auth(client):
+    r = await client.get("/api/starbases/1234567?system_id=30000142")
+    assert r.status_code == 401
+
+
 async def test_member_returns_401_without_auth(client):
     r = await client.get("/api/member")
     assert r.status_code == 401

@@ -37,6 +37,27 @@ async def init_db():
                 cached_at    REAL    NOT NULL
             )
         """)
+        for col in ("type_id INTEGER", "system_id INTEGER"):
+            try:
+                await db.execute(f"ALTER TABLE structure_cache ADD COLUMN {col}")
+            except aiosqlite.OperationalError:
+                pass
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS type_cache (
+                type_id   INTEGER PRIMARY KEY,
+                name      TEXT    NOT NULL,
+                group_id  INTEGER,
+                cached_at REAL    NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS system_cache (
+                system_id       INTEGER PRIMARY KEY,
+                name            TEXT    NOT NULL,
+                security_status REAL,
+                cached_at       REAL    NOT NULL
+            )
+        """)
         await db.commit()
 
 
@@ -89,23 +110,76 @@ async def get_janice_cache(item_id: int) -> dict | None:
             return dict(row) if row else None
 
 
-async def get_cached_structure(structure_id: int) -> str | None:
+async def get_cached_structure(structure_id: int) -> dict | None:
     async with aiosqlite.connect(_db_path()) as db:
-        async with db.execute("SELECT name FROM structure_cache WHERE structure_id = ?",
-                              (structure_id,)) as cur:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT name, type_id, system_id FROM structure_cache WHERE structure_id = ?",
+            (structure_id,),
+        ) as cur:
             row = await cur.fetchone()
-            return row[0] if row else None
+            return dict(row) if row else None
 
 
-async def cache_structure_name(structure_id: int, name: str):
+async def cache_structure_name(structure_id: int, name: str,
+                               type_id: int | None = None,
+                               system_id: int | None = None):
     async with aiosqlite.connect(_db_path()) as db:
         await db.execute("""
-            INSERT INTO structure_cache (structure_id, name, cached_at)
-            VALUES (?, ?, ?)
+            INSERT INTO structure_cache (structure_id, name, type_id, system_id, cached_at)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(structure_id) DO UPDATE SET
-                name = excluded.name,
+                name      = excluded.name,
+                type_id   = COALESCE(excluded.type_id,   structure_cache.type_id),
+                system_id = COALESCE(excluded.system_id, structure_cache.system_id),
                 cached_at = excluded.cached_at
-        """, (structure_id, name, time.time()))
+        """, (structure_id, name, type_id, system_id, time.time()))
+        await db.commit()
+
+
+async def get_cached_type(type_id: int) -> dict | None:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT name, group_id FROM type_cache WHERE type_id = ?", (type_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def cache_type(type_id: int, name: str, group_id: int | None = None):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute("""
+            INSERT INTO type_cache (type_id, name, group_id, cached_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(type_id) DO UPDATE SET
+                name = excluded.name,
+                group_id = excluded.group_id,
+                cached_at = excluded.cached_at
+        """, (type_id, name, group_id, time.time()))
+        await db.commit()
+
+
+async def get_cached_system(system_id: int) -> dict | None:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT name, security_status FROM system_cache WHERE system_id = ?", (system_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def cache_system(system_id: int, name: str, security_status: float | None = None):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute("""
+            INSERT INTO system_cache (system_id, name, security_status, cached_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(system_id) DO UPDATE SET
+                name = excluded.name,
+                security_status = excluded.security_status,
+                cached_at = excluded.cached_at
+        """, (system_id, name, security_status, time.time()))
         await db.commit()
 
 
