@@ -96,6 +96,26 @@ async def get_skills(character_id: int, access_token: str) -> dict:
         return r.json()
 
 
+async def get_character_attributes(character_id: int, access_token: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/attributes/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_character_skillqueue(character_id: int, access_token: str) -> list:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/skillqueue/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 async def get_character_location(character_id: int, access_token: str) -> dict:
     async with httpx.AsyncClient() as client:
         r = await client.get(

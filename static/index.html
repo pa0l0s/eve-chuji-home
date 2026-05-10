@@ -1235,6 +1235,8 @@
       ${renderCharacterCard(m)}
       ${renderLocationShipCard(m)}
       ${renderFinancialsCard(m)}
+      ${renderAttributesCard(m)}
+      ${renderSkillQueueCard(m)}
       <div class="card full" id="contracts-card">
         <div class="card-title">Your Contracts</div>
         <div class="skeleton" style="height:60px"></div>
@@ -1396,6 +1398,130 @@
           </div>
         </div>
       </div>`;
+  }
+
+  function renderAttributesCard(m) {
+    const err = sectionError(m.attributes);
+    const a = sectionData(m.attributes);
+    if (err && !a) {
+      return `<div class="card"><div class="card-title">Attributes</div>${cardErrorBlock(err)}</div>`;
+    }
+    const attrs = [
+      ['Perception',  a?.perception],
+      ['Memory',      a?.memory],
+      ['Willpower',   a?.willpower],
+      ['Intelligence', a?.intelligence],
+      ['Charisma',    a?.charisma],
+    ];
+    const maxVal = Math.max(...attrs.map(([, v]) => v || 0), 27);
+    const rows = attrs.map(([label, val]) => `
+      <div style="display:grid;grid-template-columns:90px 1fr 30px;align-items:center;gap:0.5rem;
+                  padding:0.2rem 0;font-size:0.78rem">
+        <span style="color:#64748b">${label}</span>
+        <div style="height:5px;background:#252a3d;border-radius:3px;overflow:hidden">
+          <div style="height:100%;background:#38bdf8;width:${((val || 0) / maxVal * 100).toFixed(0)}%"></div>
+        </div>
+        <span style="color:#e2e8f0;text-align:right;font-weight:600">${val ?? '–'}</span>
+      </div>`).join('');
+    const lastRemap = a?.last_remap_date ? new Date(a.last_remap_date).toLocaleDateString() : '–';
+    const bonusRemaps = a?.bonus_remaps ?? 0;
+    return `
+      <div class="card">
+        <div class="card-title">Attributes</div>
+        ${rows}
+        <div style="margin-top:0.6rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;
+                    font-size:0.7rem;color:#64748b">
+          <div>
+            <div style="text-transform:uppercase;letter-spacing:0.06em">Last Remap</div>
+            <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">${lastRemap}</div>
+          </div>
+          <div>
+            <div style="text-transform:uppercase;letter-spacing:0.06em">Bonus Remaps</div>
+            <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">${bonusRemaps}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderSkillQueueCard(m) {
+    const err = sectionError(m.skillqueue);
+    const queue = sectionData(m.skillqueue);
+    if (err && !queue) {
+      return `<div class="card"><div class="card-title">Skill Queue</div>${cardErrorBlock(err)}</div>`;
+    }
+    if (!queue?.length) {
+      return `<div class="card"><div class="card-title">Skill Queue</div>
+        <p style="color:#475569;font-size:0.85rem;padding:0.5rem 0">Queue is empty.</p></div>`;
+    }
+    const now = Date.now();
+    const current = queue.find(s => {
+      const start = s.start_date ? new Date(s.start_date).getTime() : 0;
+      const finish = s.finish_date ? new Date(s.finish_date).getTime() : 0;
+      return start && finish && start <= now && now < finish;
+    }) || queue[0];
+
+    const currentBlock = current
+      ? (() => {
+          const startSP = current.training_start_sp ?? current.level_start_sp ?? 0;
+          const endSP = current.level_end_sp ?? 0;
+          const totalRange = endSP - startSP;
+          let pct = 0;
+          if (current.start_date && current.finish_date) {
+            const s = new Date(current.start_date).getTime();
+            const f = new Date(current.finish_date).getTime();
+            if (f > s) pct = Math.max(0, Math.min(100, (now - s) / (f - s) * 100));
+          }
+          const remaining = current.finish_date
+            ? Math.max(0, new Date(current.finish_date).getTime() - now)
+            : null;
+          return `
+            <div style="background:#252a3d;border-radius:8px;padding:0.7rem 0.85rem">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem;margin-bottom:0.4rem">
+                <div style="color:#e2e8f0;font-weight:600;font-size:0.88rem">
+                  ${escHtml(current.skill_name || 'Skill #' + current.skill_id)}
+                  <span style="color:#38bdf8;margin-left:0.3rem">${romanLevel(current.finished_level)}</span>
+                </div>
+                <div style="color:#94a3b8;font-size:0.75rem">
+                  ${remaining != null ? fmtDuration(remaining / 1000) + ' left' : '–'}
+                </div>
+              </div>
+              <div style="height:6px;background:#1a1e2e;border-radius:3px;overflow:hidden">
+                <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
+              </div>
+              <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
+                ${fmtNum(Math.round(startSP + totalRange * pct / 100))} / ${fmtNum(endSP)} SP
+              </div>
+            </div>`;
+        })()
+      : '';
+
+    const upcoming = queue.filter(s => s !== current).slice(0, 6);
+    const upcomingBlock = upcoming.length ? `
+      <div style="margin-top:0.7rem">
+        <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem">
+          Next ${upcoming.length} of ${queue.length - (current ? 1 : 0)} queued
+        </div>
+        ${upcoming.map(s => `
+          <div style="display:flex;justify-content:space-between;font-size:0.75rem;
+                      padding:0.25rem 0;border-bottom:1px solid #1a1e2e;color:#94a3b8">
+            <span>${escHtml(s.skill_name || 'Skill #' + s.skill_id)}
+              <span style="color:#38bdf8">${romanLevel(s.finished_level)}</span></span>
+            <span style="color:#64748b">${s.finish_date ? new Date(s.finish_date).toLocaleDateString() : '–'}</span>
+          </div>`).join('')}
+      </div>` : '';
+
+    return `
+      <div class="card">
+        <div class="card-title">Skill Queue
+          <span class="badge badge-muted" style="margin-left:0.4rem">${queue.length}</span>
+        </div>
+        ${currentBlock}
+        ${upcomingBlock}
+      </div>`;
+  }
+
+  function romanLevel(n) {
+    return ['', 'I', 'II', 'III', 'IV', 'V'][n] || String(n);
   }
 
   function fetchCorpName(corpId) {

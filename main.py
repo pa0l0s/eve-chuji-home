@@ -14,6 +14,7 @@ import db as database
 from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
 from esi import (
     get_valid_token, get_character, get_wallet, get_skills,
+    get_character_attributes, get_character_skillqueue,
     get_character_location, get_character_online, get_character_ship,
     get_character_contracts,
     get_corp_contracts, get_corp_projects,
@@ -447,13 +448,16 @@ async def member(session: str | None = Cookie(None)):
         raise HTTPException(status_code=502, detail=f"Token refresh failed: {e}")
 
     (char_data, char_err), (wallet, wallet_err), (skills, skills_err), \
-    (location, loc_err),   (online, online_err),  (ship, ship_err) = await asyncio.gather(
+    (location, loc_err),   (online, online_err),  (ship, ship_err), \
+    (attributes, attr_err), (skillqueue, sq_err) = await asyncio.gather(
         _safe(get_character(character_id, access_token)),
         _safe(get_wallet(character_id, access_token)),
         _safe(get_skills(character_id, access_token)),
         _safe(get_character_location(character_id, access_token)),
         _safe(get_character_online(character_id, access_token)),
         _safe(get_character_ship(character_id, access_token)),
+        _safe(get_character_attributes(character_id, access_token)),
+        _safe(get_character_skillqueue(character_id, access_token)),
     )
 
     profile = None
@@ -509,14 +513,27 @@ async def member(session: str | None = Cookie(None)):
             "logins": online.get("logins"),
         }
 
+    # Enrich skill queue with skill names; sort by queue_position.
+    skillqueue_block = None
+    if skillqueue is not None:
+        sq_sorted = sorted(skillqueue, key=lambda s: s.get("queue_position", 999))
+        skill_ids = list({s["skill_id"] for s in sq_sorted if s.get("skill_id")})
+        names_map = {}
+        if skill_ids:
+            type_infos = await asyncio.gather(*[_safe(get_type_info(t)) for t in skill_ids])
+            names_map = {sid: (info or {}).get("name") for sid, (info, _) in zip(skill_ids, type_infos)}
+        skillqueue_block = [{**s, "skill_name": names_map.get(s.get("skill_id"))} for s in sq_sorted]
+
     return {
         "character_id": character_id,
-        "profile":  _wrap(profile,         char_err),
-        "wallet":   _wrap(wallet,          wallet_err),
-        "skills":   _wrap(skills_summary,  skills_err),
-        "location": _wrap(location_block,  loc_err),
-        "online":   _wrap(online_block,    online_err),
-        "ship":     _wrap(ship_block,      ship_err),
+        "profile":    _wrap(profile,         char_err),
+        "wallet":     _wrap(wallet,          wallet_err),
+        "skills":     _wrap(skills_summary,  skills_err),
+        "location":   _wrap(location_block,  loc_err),
+        "online":     _wrap(online_block,    online_err),
+        "ship":       _wrap(ship_block,      ship_err),
+        "attributes": _wrap(attributes,      attr_err),
+        "skillqueue": _wrap(skillqueue_block, sq_err),
     }
 
 
