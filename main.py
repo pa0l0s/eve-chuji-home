@@ -133,6 +133,7 @@ async def projects(session: str | None = Cookie(None)):
                 buyback_type_ids.append(item["type_id"])
 
     prices: dict[int, float] = {}
+    type_id_to_name: dict[int, str] = {}
     if buyback_type_ids:
         unique_ids = list(set(buyback_type_ids))
         names = await asyncio.gather(*[get_type_name(tid) for tid in unique_ids])
@@ -142,6 +143,7 @@ async def projects(session: str | None = Cookie(None)):
     for project in active:
         for item in project.get("required_deliverables", []):
             item["corp_buy_price"] = prices.get(item["type_id"])
+            item["type_name"] = type_id_to_name.get(item["type_id"])
 
     return active
 
