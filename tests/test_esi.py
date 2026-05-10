@@ -114,7 +114,7 @@ async def test_get_corp_contracts():
 
 @respx.mock
 async def test_get_corp_projects():
-    respx.get("https://esi.evetech.net/latest/corporations/98340844/projects").mock(
+    respx.get("https://esi.evetech.net/corporations/98340844/projects").mock(
         return_value=Response(200, json={
             "projects": [
                 {"id": "abc-123", "name": "Deliver Tritanium", "state": "Active",

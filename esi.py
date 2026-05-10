@@ -136,18 +136,21 @@ async def get_corp_contracts(corporation_id: int, access_token: str) -> list:
 
 
 async def get_corp_projects(corporation_id: int, access_token: str) -> list:
-    # Projects API requires compatibility_date >= 2026-01-01.
+    # New ESI endpoint: lives at root (not /latest/), requires X-Compatibility-Date header.
     result = []
     cursor = None
     async with httpx.AsyncClient() as client:
         while True:
-            params = {"compatibility_date": "2026-01-01", "limit": 100}
+            params = {"limit": 100}
             if cursor:
                 params["after"] = cursor
             r = await client.get(
-                f"{ESI_BASE}/corporations/{corporation_id}/projects",
+                f"https://esi.evetech.net/corporations/{corporation_id}/projects",
                 params=params,
-                headers={"Authorization": f"Bearer {access_token}"},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "X-Compatibility-Date": "2026-01-01",
+                },
             )
             r.raise_for_status()
             data = r.json()
