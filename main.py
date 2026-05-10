@@ -20,6 +20,7 @@ from esi import (
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_system_info, get_server_status,
+    open_contract_in_client,
     resolve_names, resolve_type_ids, get_jita_buy_max,
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
 )
@@ -50,6 +51,23 @@ async def get_current_character_id(session: str | None = Cookie(None)) -> int:
 
 
 # ── Auth routes ──────────────────────────────────────────────────────────────
+
+@app.post("/api/ui/open-contract/{contract_id}")
+async def open_contract(contract_id: int, session: str | None = Cookie(None)):
+    """Send an in-game UI open-contract request to the user's EVE client."""
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        await open_contract_in_client(contract_id, access_token)
+    except httpx.HTTPStatusError as e:
+        print(f"ESI open-contract HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Missing scope: esi-ui.open_window.v1")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"ok": True}
+
 
 @app.get("/api/status")
 async def server_status():

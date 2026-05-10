@@ -392,6 +392,28 @@
 
     .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
 
+    /* ── Open in EVE button ── */
+    .btn-ingame {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      background: #252a3d;
+      border: 1px solid #2d3348;
+      border-radius: 4px;
+      color: #64748b;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+      font-size: 0.85rem;
+      padding: 0;
+    }
+    .btn-ingame:hover { color: #38bdf8; border-color: #38bdf8; background: #0c2233; }
+    .btn-ingame:active { transform: translateY(1px); }
+    .btn-ingame.btn-ok { color: #4ade80; border-color: #4ade80; }
+    .btn-ingame.btn-fail { color: #f87171; border-color: #f87171; }
+    .btn-ingame svg { width: 14px; height: 14px; }
+
     /* ── Skeleton loading ── */
     .skeleton {
       background: linear-gradient(90deg, #1e2130 0%, #252a3d 50%, #1e2130 100%);
@@ -692,7 +714,7 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Route</th><th>Volume</th><th>Reward</th><th>Collateral</th><th>Hauler</th><th>Status</th><th>Expires</th>
+            <th>Route</th><th>Volume</th><th>Reward</th><th>Collateral</th><th>Hauler</th><th>Status</th><th>Expires</th><th></th>
           </tr></thead>
           <tbody>
             ${hauling.map(c => `
@@ -709,6 +731,7 @@
                 <td>${haulerCell(c)}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
+                <td>${openInEveBtn(c.contract_id)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -719,7 +742,7 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Title</th><th>Starting Bid</th><th>Buyout</th><th>Status</th><th>Ends</th>
+            <th>Title</th><th>Starting Bid</th><th>Buyout</th><th>Status</th><th>Ends</th><th></th>
           </tr></thead>
           <tbody>
             ${abyssal.map(c => `
@@ -732,6 +755,7 @@
                 <td>${c.buyout ? fmtISK(c.buyout) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
+                <td>${openInEveBtn(c.contract_id)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -745,7 +769,7 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Title</th><th>Type</th><th>Price</th><th>Accepted by</th><th>Status</th><th>Expires</th>
+            <th>Title</th><th>Type</th><th>Price</th><th>Accepted by</th><th>Status</th><th>Expires</th><th></th>
           </tr></thead>
           <tbody>
             ${others.map(c => `
@@ -759,6 +783,7 @@
                 <td>${haulerCell(c)}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
+                <td>${openInEveBtn(c.contract_id)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
@@ -782,6 +807,41 @@
       return `<span style="color:#4ade80">${escHtml(c.acceptor_name)}</span>${accepted}`;
     }
     return '<span style="color:#475569">–</span>';
+  }
+
+  function openInEveBtn(contractId) {
+    return `<button class="btn-ingame" onclick="openContractInEve(this, ${contractId})"
+                    title="Open in EVE client" aria-label="Open in EVE">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 3h6v6"/><path d="M10 14L21 3"/>
+        <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>
+      </svg>
+    </button>`;
+  }
+
+  async function openContractInEve(btn, contractId) {
+    btn.disabled = true;
+    btn.classList.remove('btn-ok', 'btn-fail');
+    try {
+      const r = await fetch(`/api/ui/open-contract/${contractId}`, { method: 'POST' });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        btn.classList.add('btn-fail');
+        btn.title = detail.detail || `Failed (${r.status})`;
+      } else {
+        btn.classList.add('btn-ok');
+        btn.title = 'Sent to EVE client';
+      }
+    } catch {
+      btn.classList.add('btn-fail');
+      btn.title = 'Network error';
+    }
+    setTimeout(() => {
+      btn.classList.remove('btn-ok', 'btn-fail');
+      btn.disabled = false;
+      btn.title = 'Open in EVE client';
+    }, 2500);
   }
 
   function shortLoc(name) {
@@ -1389,7 +1449,7 @@
           </div>
           <div style="color:#38bdf8;font-weight:600;text-align:right;white-space:nowrap">${valueStr}</div>
           <div style="color:#94a3b8;text-align:right;white-space:nowrap;font-size:0.75rem">${time}</div>
-          <div></div>
+          <div>${openInEveBtn(c.contract_id)}</div>
         </div>`;
     }).join('');
   }

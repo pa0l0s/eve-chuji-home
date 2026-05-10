@@ -331,6 +331,20 @@ async def get_system_info(system_id: int) -> dict:
             return {"name": f"System #{system_id}", "security_status": None}
 
 
+async def open_contract_in_client(contract_id: int, access_token: str) -> None:
+    """Open the contract window in the EVE client of the authenticated character."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://esi.evetech.net/ui/openwindow/contract",
+            params={"contract_id": contract_id},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "X-Compatibility-Date": "2026-01-01",
+            },
+        )
+        r.raise_for_status()
+
+
 async def get_server_status() -> dict | None:
     """EVE Tranquility server status. Public ESI, no auth. Returns None on failure."""
     async with httpx.AsyncClient(timeout=4.0) as client:
