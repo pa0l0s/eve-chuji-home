@@ -122,6 +122,20 @@ async def get_corp_projects(corporation_id: int, access_token: str) -> list:
     return result
 
 
+async def resolve_names(ids: list[int]) -> dict[int, str]:
+    """Resolve character / corp / alliance IDs to names via ESI /universe/names/."""
+    clean = [i for i in {*ids} if i]
+    if not clean:
+        return {}
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.post(f"{ESI_BASE}/universe/names/", json=clean)
+            r.raise_for_status()
+            return {item["id"]: item["name"] for item in r.json()}
+        except httpx.HTTPError:
+            return {}
+
+
 async def get_location_name(location_id: int, access_token: str) -> str:
     async with httpx.AsyncClient() as client:
         try:

@@ -3,7 +3,7 @@ import pytest
 import respx
 from httpx import Response
 from db import init_db, upsert_token
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name, resolve_names
 
 
 @pytest.fixture(autouse=True)
@@ -123,6 +123,24 @@ async def test_get_corp_projects():
     assert len(result) == 1
     assert result[0]["name"] == "Deliver Tritanium"
     assert result[0]["progress"]["current"] == 50
+
+
+@respx.mock
+async def test_resolve_names():
+    respx.post("https://esi.evetech.net/latest/universe/names/").mock(
+        return_value=Response(200, json=[
+            {"id": 95465499, "name": "CCP Bartender", "category": "character"},
+            {"id": 98340844, "name": "Grupa Operacyjna ZLY CHUJI", "category": "corporation"},
+        ])
+    )
+    names = await resolve_names([95465499, 98340844, 0, None])
+    assert names[95465499] == "CCP Bartender"
+    assert names[98340844] == "Grupa Operacyjna ZLY CHUJI"
+
+
+async def test_resolve_names_empty():
+    assert await resolve_names([]) == {}
+    assert await resolve_names([0, None]) == {}
 
 
 @respx.mock

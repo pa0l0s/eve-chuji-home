@@ -531,7 +531,7 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Route</th><th>Volume</th><th>Reward</th><th>Collateral</th><th>Status</th><th>Expires</th>
+            <th>Route</th><th>Volume</th><th>Reward</th><th>Collateral</th><th>Hauler</th><th>Status</th><th>Expires</th>
           </tr></thead>
           <tbody>
             ${hauling.map(c => `
@@ -540,10 +540,12 @@
                   ${escHtml(shortLoc(c.start_name))}
                   <span style="color:#475569"> → </span>
                   ${escHtml(shortLoc(c.end_name))}
+                  ${issuerLine(c)}
                 </td>
                 <td>${fmtNum(Math.round(c.volume || 0))} m³</td>
                 <td style="color:#38bdf8">${fmtISK(c.reward || 0)} ISK</td>
                 <td>${fmtISK(c.collateral || 0)} ISK</td>
+                <td>${haulerCell(c)}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
               </tr>`).join('')}
@@ -561,7 +563,10 @@
           <tbody>
             ${abyssal.map(c => `
               <tr>
-                <td style="color:#e2e8f0">${escHtml(c.title || 'Auction #' + c.contract_id)}</td>
+                <td style="color:#e2e8f0">
+                  ${escHtml(c.title || 'Auction #' + c.contract_id)}
+                  ${issuerLine(c)}
+                </td>
                 <td style="color:#38bdf8">${fmtISK(c.price || 0)} ISK</td>
                 <td>${c.buyout ? fmtISK(c.buyout) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
                 <td>${statusBadge(c.status)}</td>
@@ -579,20 +584,43 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Title</th><th>Type</th><th>Price</th><th>Status</th><th>Expires</th>
+            <th>Title</th><th>Type</th><th>Price</th><th>Accepted by</th><th>Status</th><th>Expires</th>
           </tr></thead>
           <tbody>
             ${others.map(c => `
               <tr>
-                <td style="color:#e2e8f0">${escHtml(c.title || 'Contract #' + c.contract_id)}</td>
+                <td style="color:#e2e8f0">
+                  ${escHtml(c.title || 'Contract #' + c.contract_id)}
+                  ${issuerLine(c)}
+                </td>
                 <td><span class="badge badge-muted">${typeLabel(c.type)}</span></td>
                 <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${haulerCell(c)}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
               </tr>`).join('')}
           </tbody>
         </table>
       </div>` : '<p class="contract-empty">No other active contracts.</p>';
+  }
+
+  function issuerLine(c) {
+    if (!c.issuer_name) return '';
+    return `<div style="font-size:0.7rem;color:#475569;margin-top:0.2rem">
+              by ${escHtml(c.issuer_name)}
+            </div>`;
+  }
+
+  function haulerCell(c) {
+    if (c.acceptor_name) {
+      const accepted = c.date_accepted
+        ? `<div style="font-size:0.65rem;color:#475569;margin-top:0.15rem">
+             ${new Date(c.date_accepted).toLocaleDateString()}
+           </div>`
+        : '';
+      return `<span style="color:#4ade80">${escHtml(c.acceptor_name)}</span>${accepted}`;
+    }
+    return '<span style="color:#475569">–</span>';
   }
 
   function shortLoc(name) {

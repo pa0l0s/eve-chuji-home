@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 import db as database
 from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_corp_projects, get_location_name, resolve_names
 
 _corp_id = os.getenv("CORP_ID")
 if not _corp_id:
@@ -134,16 +134,25 @@ async def contracts(session: str | None = Cookie(None)):
     abyssal = [c for c in active if c.get("type") == "auction"]
     others  = [c for c in active if c.get("type") not in ("courier", "auction")]
 
-    # Resolve location names for hauling contracts
+    # Resolve location names for hauling contracts and character names for issuer/acceptor
     loc_ids = {c.get("start_location_id") for c in hauling} | {c.get("end_location_id") for c in hauling}
     loc_ids.discard(None)
-    loc_names = dict(zip(
-        loc_ids,
-        await asyncio.gather(*[get_location_name(lid, access_token) for lid in loc_ids])
-    ))
+    char_ids = [c.get(k) for c in active for k in ("issuer_id", "acceptor_id") if c.get(k)]
+
+    loc_names_list, char_names = await asyncio.gather(
+        asyncio.gather(*[get_location_name(lid, access_token) for lid in loc_ids]),
+        resolve_names(char_ids),
+    )
+    loc_names = dict(zip(loc_ids, loc_names_list))
+
     for c in hauling:
         c["start_name"] = loc_names.get(c.get("start_location_id"), str(c.get("start_location_id", "")))
         c["end_name"]   = loc_names.get(c.get("end_location_id"),   str(c.get("end_location_id", "")))
+    for c in active:
+        if c.get("issuer_id"):
+            c["issuer_name"] = char_names.get(c["issuer_id"])
+        if c.get("acceptor_id"):
+            c["acceptor_name"] = char_names.get(c["acceptor_id"])
 
     return {"hauling": hauling, "abyssal": abyssal, "others": others}
 
