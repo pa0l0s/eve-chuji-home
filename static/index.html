@@ -362,6 +362,27 @@
 
     .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
 
+    /* ── Skeleton loading ── */
+    .skeleton {
+      background: linear-gradient(90deg, #1e2130 0%, #252a3d 50%, #1e2130 100%);
+      background-size: 200% 100%;
+      animation: skeleton 1.4s ease-in-out infinite;
+      border-radius: 4px;
+      color: transparent;
+    }
+    @keyframes skeleton {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .card-error {
+      color: #fca5a5;
+      background: #2a0d0d;
+      border: 1px solid #ef4444;
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+    }
+
     /* ── Personal contracts list ── */
     .pc-row {
       display: grid;
@@ -1029,104 +1050,203 @@
   // ── Member ────────────────────────────────────────────────────────────────
 
   async function loadMember() {
+    hideError('member-error');
+    // Show skeleton immediately, then load profile + contracts in parallel.
+    renderMemberSkeleton();
+    fetchSection('/api/member',         renderMemberProfile,   'profile-error');
+    fetchSection('/api/me/contracts',   renderMemberContracts, 'contracts-error');
+  }
+
+  async function fetchSection(url, renderer, errorId) {
     try {
-      const r = await fetch('/api/member');
+      const r = await fetch(url);
       if (!r.ok) {
-        showError('member-error', 'ESI unavailable — member data could not be loaded.');
+        const detail = await r.json().catch(() => ({}));
+        renderer(null, detail.detail || `Failed (${r.status})`);
         return;
       }
-      hideError('member-error');
-      renderMember(await r.json());
-    } catch {
-      showError('member-error', 'Network error — could not load member data.');
+      renderer(await r.json(), null);
+    } catch (e) {
+      renderer(null, 'Network error');
     }
   }
 
-  function renderMember(m) {
-    const secStatColor = m.security_status >= 0 ? '#4ade80' : '#f87171';
-    const secSign  = m.security_status >= 0 ? '+' : '';
-    const trainingBadge = m.training_active
-      ? '<span class="badge badge-green">Training</span>'
-      : '<span class="badge badge-muted">Idle</span>';
+  function renderMemberSkeleton() {
+    document.getElementById('member-grid').innerHTML = `
+      <div class="card"><div class="card-title">Character</div>
+        <div class="skeleton" style="height:100px"></div></div>
+      <div class="card"><div class="card-title">Location &amp; Ship</div>
+        <div class="skeleton" style="height:100px"></div></div>
+      <div class="card"><div class="card-title">Financials &amp; Skills</div>
+        <div class="skeleton" style="height:100px"></div></div>
+      <div class="card full"><div class="card-title">Your Contracts</div>
+        <div class="skeleton" style="height:60px"></div></div>`;
+  }
 
-    const onlineDot = m.online?.is_online
+  function sectionData(section) {
+    // Helper: return data or null if section errored/missing
+    return section?.data ?? null;
+  }
+
+  function sectionError(section) {
+    return section?.error ?? null;
+  }
+
+  function cardErrorBlock(label) {
+    return `<div class="card-error">${escHtml(label)}</div>`;
+  }
+
+  function renderMemberProfile(m, topError) {
+    const grid = document.getElementById('member-grid');
+    if (!m) {
+      grid.innerHTML = `<div class="card full">${cardErrorBlock('Profile: ' + (topError || 'failed'))}</div>`;
+      // Keep contracts skeleton — it has its own request
+      return;
+    }
+    grid.innerHTML = `
+      ${renderCharacterCard(m)}
+      ${renderLocationShipCard(m)}
+      ${renderFinancialsCard(m)}
+      <div class="card full" id="contracts-card">
+        <div class="card-title">Your Contracts</div>
+        <div class="skeleton" style="height:60px"></div>
+      </div>`;
+    fetchCorpName(sectionData(m.profile)?.corporation_id);
+  }
+
+  function renderMemberContracts(data, error) {
+    const card = document.getElementById('contracts-card');
+    if (!card) return; // profile not rendered yet
+    if (error) {
+      card.innerHTML = `
+        <div class="card-title">Your Contracts</div>
+        ${cardErrorBlock('Contracts: ' + error)}`;
+      return;
+    }
+    card.innerHTML = `
+      <div class="card-title">Your Contracts ${contractCountsBadge(data.contracts)}</div>
+      ${renderPersonalContracts(data.contracts, data.character_id)}`;
+  }
+
+  function renderCharacterCard(m) {
+    const charErr = sectionError(m.profile);
+    const onlineErr = sectionError(m.online);
+    const p = sectionData(m.profile);
+    const o = sectionData(m.online);
+    if (charErr && !p) {
+      return `<div class="card"><div class="card-title">Character</div>${cardErrorBlock(charErr)}</div>`;
+    }
+    const secStatColor = p && p.security_status >= 0 ? '#4ade80' : '#f87171';
+    const secSign      = p && p.security_status >= 0 ? '+' : '';
+    const onlineDot = o?.is_online
       ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;margin-right:0.4rem"></span>'
       : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#475569;margin-right:0.4rem"></span>';
-    const onlineLabel = m.online?.is_online ? 'Online' : 'Offline';
-
-    const sysSec = m.location?.system_security;
-    const sysSecText = (typeof sysSec === 'number')
-      ? ` <span style="color:${secColor(sysSec)}">${sysSec.toFixed(1)}</span>` : '';
-    const dockedRow = m.location?.docked_at
-      ? `<div class="metric"><div class="label">Docked at</div>
-           <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">${escHtml(m.location.docked_at)}</div>
-         </div>`
-      : `<div class="metric"><div class="label">Status</div>
-           <div style="font-size:0.95rem;color:#94a3b8;font-weight:600">In Space</div>
-         </div>`;
-
-    document.getElementById('member-grid').innerHTML = `
+    const onlineLabel = onlineErr ? 'Online status unavailable' : (o?.is_online ? 'Online' : 'Offline');
+    return `
       <div class="card">
         <div class="card-title">Character</div>
         <div class="char-card">
           <img class="char-portrait"
                src="https://images.evetech.net/characters/${m.character_id}/portrait?size=128" alt="">
           <div class="char-info">
-            <div class="name">${escHtml(m.character_name)}</div>
-            <div class="corp" id="corp-name-display">Corp ID: ${m.corporation_id}</div>
+            <div class="name">${escHtml(p?.character_name || 'Unknown')}</div>
+            <div class="corp" id="corp-name-display">Corp ID: ${p?.corporation_id ?? '–'}</div>
             <div class="sec-status" style="color:${secStatColor}">
-              Security Status: ${secSign}${m.security_status.toFixed(1)}
+              Security Status: ${p ? secSign + p.security_status.toFixed(1) : '–'}
             </div>
             <div style="font-size:0.8rem;color:#94a3b8;margin-top:0.4rem">
               ${onlineDot}${onlineLabel}
             </div>
           </div>
         </div>
-      </div>
+      </div>`;
+  }
 
-      <div class="card">
-        <div class="card-title">Location &amp; Ship</div>
-        <div class="metrics">
-          <div class="metric">
-            <div class="label">Solar System</div>
-            <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">
-              ${escHtml(m.location?.system_name || '–')}${sysSecText}${systemLinks(m.location?.system_name, m.location?.system_id)}
-            </div>
-          </div>
-          ${dockedRow}
-        </div>
-        <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.75rem;
+  function renderLocationShipCard(m) {
+    const locErr = sectionError(m.location);
+    const shipErr = sectionError(m.ship);
+    const loc = sectionData(m.location);
+    const ship = sectionData(m.ship);
+
+    const locationBlock = locErr
+      ? cardErrorBlock('Location: ' + locErr)
+      : (() => {
+          const sysSec = loc?.system_security;
+          const sysSecText = (typeof sysSec === 'number')
+            ? ` <span style="color:${secColor(sysSec)}">${sysSec.toFixed(1)}</span>` : '';
+          const dockedRow = loc?.docked_at
+            ? `<div class="metric"><div class="label">Docked at</div>
+                 <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">${escHtml(loc.docked_at)}</div>
+               </div>`
+            : `<div class="metric"><div class="label">Status</div>
+                 <div style="font-size:0.95rem;color:#94a3b8;font-weight:600">In Space</div>
+               </div>`;
+          return `
+            <div class="metrics">
+              <div class="metric">
+                <div class="label">Solar System</div>
+                <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">
+                  ${escHtml(loc?.system_name || '–')}${sysSecText}${systemLinks(loc?.system_name, loc?.system_id)}
+                </div>
+              </div>
+              ${dockedRow}
+            </div>`;
+        })();
+
+    const shipBlock = shipErr
+      ? cardErrorBlock('Ship: ' + shipErr)
+      : `<div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.75rem;
                     background:#252a3d;border-radius:8px;padding:0.6rem 0.75rem">
-          ${m.ship?.type_id
-            ? `<img src="https://images.evetech.net/types/${m.ship.type_id}/render?size=64"
+          ${ship?.type_id
+            ? `<img src="https://images.evetech.net/types/${ship.type_id}/render?size=64"
                     alt="" style="width:48px;height:48px;border-radius:4px;background:#1e2130">`
             : ''}
           <div style="flex:1;min-width:0">
-            <div style="font-size:0.7rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">
-              Active Ship
-            </div>
+            <div style="font-size:0.7rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Active Ship</div>
             <div style="font-size:0.9rem;color:#e2e8f0;font-weight:600;
                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-              ${escHtml(m.ship?.name || '–')}
+              ${escHtml(ship?.name || '–')}
             </div>
-            <div style="font-size:0.75rem;color:#94a3b8">
-              ${escHtml(m.ship?.type_name || '')}
-            </div>
+            <div style="font-size:0.75rem;color:#94a3b8">${escHtml(ship?.type_name || '')}</div>
           </div>
-        </div>
-      </div>
+        </div>`;
 
+    return `<div class="card">
+      <div class="card-title">Location &amp; Ship</div>
+      ${locationBlock}
+      ${shipBlock}
+    </div>`;
+  }
+
+  function renderFinancialsCard(m) {
+    const walletErr = sectionError(m.wallet);
+    const skillsErr = sectionError(m.skills);
+    const wallet = sectionData(m.wallet);
+    const skills = sectionData(m.skills);
+    const online = sectionData(m.online);
+
+    const walletCell = walletErr
+      ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
+      : `<div class="metric">
+           <div class="label">Wallet Balance</div>
+           <div class="val">${fmtISK(wallet || 0)}<span class="unit">ISK</span></div>
+         </div>`;
+    const skillsCell = skillsErr
+      ? `<div class="metric">${cardErrorBlock(skillsErr)}</div>`
+      : `<div class="metric">
+           <div class="label">Total Skillpoints</div>
+           <div class="val">${fmtSP(skills?.total_sp || 0)}<span class="unit">SP</span></div>
+         </div>`;
+    const trainingBadge = skillsErr ? '' : (skills?.training_active
+      ? '<span class="badge badge-green">Training</span>'
+      : '<span class="badge badge-muted">Idle</span>');
+
+    return `
       <div class="card">
         <div class="card-title">Financials &amp; Skills</div>
         <div class="metrics">
-          <div class="metric">
-            <div class="label">Wallet Balance</div>
-            <div class="val">${fmtISK(m.wallet_balance)}<span class="unit">ISK</span></div>
-          </div>
-          <div class="metric">
-            <div class="label">Total Skillpoints</div>
-            <div class="val">${fmtSP(m.total_sp)}<span class="unit">SP</span></div>
-          </div>
+          ${walletCell}
+          ${skillsCell}
         </div>
         <div style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;
                     text-transform:uppercase;letter-spacing:0.06em">
@@ -1137,24 +1257,22 @@
           <div>
             <div style="text-transform:uppercase;letter-spacing:0.06em">Last Login</div>
             <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
-              ${m.online?.last_login ? new Date(m.online.last_login).toLocaleString() : '–'}
+              ${online?.last_login ? new Date(online.last_login).toLocaleString() : '–'}
             </div>
           </div>
           <div>
             <div style="text-transform:uppercase;letter-spacing:0.06em">Total Logins</div>
             <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
-              ${m.online?.logins != null ? fmtNum(m.online.logins) : '–'}
+              ${online?.logins != null ? fmtNum(online.logins) : '–'}
             </div>
           </div>
         </div>
-      </div>
-
-      <div class="card full">
-        <div class="card-title">Your Contracts ${contractCountsBadge(m.contracts)}</div>
-        ${renderPersonalContracts(m.contracts, m.character_id)}
       </div>`;
+  }
 
-    fetch(`https://esi.evetech.net/latest/corporations/${m.corporation_id}/`)
+  function fetchCorpName(corpId) {
+    if (!corpId) return;
+    fetch(`https://esi.evetech.net/latest/corporations/${corpId}/`)
       .then(r => r.json())
       .then(d => {
         const el = document.getElementById('corp-name-display');

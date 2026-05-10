@@ -374,82 +374,136 @@ def _classify_contract(c: dict, now: datetime) -> dict:
             "attention": None, "time_left_sec": None}
 
 
+async def _safe(coro):
+    """Run an ESI coroutine; return (result, error_string). Never raises."""
+    try:
+        return await coro, None
+    except httpx.HTTPStatusError as e:
+        msg = f"ESI {e.response.status_code}"
+        if e.response.status_code == 403:
+            msg = "Missing scope or insufficient role"
+        return None, msg
+    except httpx.HTTPError as e:
+        return None, f"ESI unavailable: {type(e).__name__}"
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+
+
+def _wrap(data, error):
+    return {"data": data, "error": error}
+
+
 @app.get("/api/member")
 async def member(session: str | None = Cookie(None)):
+    """Profile data with per-section error isolation. Contracts moved to /api/me/contracts."""
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        char_data, wallet, skills, location, online, ship, contracts_raw = await asyncio.gather(
-            get_character(character_id, access_token),
-            get_wallet(character_id, access_token),
-            get_skills(character_id, access_token),
-            get_character_location(character_id, access_token),
-            get_character_online(character_id, access_token),
-            get_character_ship(character_id, access_token),
-            get_character_contracts(character_id, access_token),
-        )
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Token refresh failed: {e}")
 
-    training_active = bool(
-        skills.get("skills") and any(
-            s.get("active_skill_level", 0) < s.get("trained_skill_level", 0)
-            for s in skills.get("skills", [])
-        )
+    (char_data, char_err), (wallet, wallet_err), (skills, skills_err), \
+    (location, loc_err),   (online, online_err),  (ship, ship_err) = await asyncio.gather(
+        _safe(get_character(character_id, access_token)),
+        _safe(get_wallet(character_id, access_token)),
+        _safe(get_skills(character_id, access_token)),
+        _safe(get_character_location(character_id, access_token)),
+        _safe(get_character_online(character_id, access_token)),
+        _safe(get_character_ship(character_id, access_token)),
     )
 
-    system_info = await get_system_info(location["solar_system_id"]) if location.get("solar_system_id") else {}
-    docked_name = None
-    if location.get("station_id"):
-        docked_name = await get_location_name(location["station_id"], access_token)
-    elif location.get("structure_id"):
-        info = await get_structure_info(location["structure_id"], access_token)
-        docked_name = info["name"]
+    profile = None
+    if char_data:
+        profile = {
+            "character_name": char_data.get("name"),
+            "corporation_id": char_data.get("corporation_id"),
+            "security_status": char_data.get("security_status", 0),
+        }
 
-    ship_type = await get_type_info(ship["ship_type_id"]) if ship.get("ship_type_id") else {}
+    skills_summary = None
+    if skills:
+        training_active = bool(
+            skills.get("skills") and any(
+                s.get("active_skill_level", 0) < s.get("trained_skill_level", 0)
+                for s in skills.get("skills", [])
+            )
+        )
+        skills_summary = {"total_sp": skills.get("total_sp", 0), "training_active": training_active}
 
-    now = datetime.now(timezone.utc)
-    char_ids_for_names = []
-    for c in contracts_raw:
-        meta = _classify_contract(c, now)
-        c.update(meta)
-        for k in ("issuer_id", "assignee_id", "acceptor_id"):
-            if c.get(k):
-                char_ids_for_names.append(c[k])
-    contract_names = await resolve_names(char_ids_for_names) if char_ids_for_names else {}
-    for c in contracts_raw:
-        if c.get("issuer_id"):   c["issuer_name"]   = contract_names.get(c["issuer_id"])
-        if c.get("assignee_id"): c["assignee_name"] = contract_names.get(c["assignee_id"])
-        if c.get("acceptor_id"): c["acceptor_name"] = contract_names.get(c["acceptor_id"])
-    contracts = sorted(contracts_raw, key=lambda c: (c["priority"], _parse_iso(c.get("date_issued")) or now))
-
-    return {
-        "character_id": character_id,
-        "character_name": char_data.get("name"),
-        "corporation_id": char_data.get("corporation_id"),
-        "security_status": char_data.get("security_status", 0),
-        "wallet_balance": wallet,
-        "total_sp": skills.get("total_sp", 0),
-        "training_active": training_active,
-        "location": {
+    location_block = None
+    if location:
+        sys_info, sys_err = await _safe(get_system_info(location["solar_system_id"])) \
+            if location.get("solar_system_id") else (None, None)
+        docked, docked_err = None, None
+        if location.get("station_id"):
+            docked, docked_err = await _safe(get_location_name(location["station_id"], access_token))
+        elif location.get("structure_id"):
+            info, docked_err = await _safe(get_structure_info(location["structure_id"], access_token))
+            docked = info["name"] if info else None
+        location_block = {
             "system_id": location.get("solar_system_id"),
-            "system_name": system_info.get("name"),
-            "system_security": system_info.get("security_status"),
-            "docked_at": docked_name,
-        },
-        "online": {
+            "system_name": (sys_info or {}).get("name"),
+            "system_security": (sys_info or {}).get("security_status"),
+            "docked_at": docked,
+        }
+
+    ship_block = None
+    if ship:
+        ship_type, _ = await _safe(get_type_info(ship["ship_type_id"])) if ship.get("ship_type_id") else (None, None)
+        ship_block = {
+            "type_id": ship.get("ship_type_id"),
+            "type_name": (ship_type or {}).get("name"),
+            "name": ship.get("ship_name"),
+        }
+
+    online_block = None
+    if online:
+        online_block = {
             "is_online": online.get("online", False),
             "last_login": online.get("last_login"),
             "last_logout": online.get("last_logout"),
             "logins": online.get("logins"),
-        },
-        "ship": {
-            "type_id": ship.get("ship_type_id"),
-            "type_name": ship_type.get("name"),
-            "name": ship.get("ship_name"),
-        },
-        "contracts": contracts,
+        }
+
+    return {
+        "character_id": character_id,
+        "profile":  _wrap(profile,         char_err),
+        "wallet":   _wrap(wallet,          wallet_err),
+        "skills":   _wrap(skills_summary,  skills_err),
+        "location": _wrap(location_block,  loc_err),
+        "online":   _wrap(online_block,    online_err),
+        "ship":     _wrap(ship_block,      ship_err),
     }
+
+
+@app.get("/api/me/contracts")
+async def my_contracts(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        contracts_raw = await get_character_contracts(character_id, access_token)
+    except httpx.HTTPStatusError as e:
+        print(f"ESI character contracts HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Missing scope: read_character_contracts")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+
+    now = datetime.now(timezone.utc)
+    char_ids = []
+    for c in contracts_raw:
+        c.update(_classify_contract(c, now))
+        for k in ("issuer_id", "assignee_id", "acceptor_id"):
+            if c.get(k):
+                char_ids.append(c[k])
+    names = await resolve_names(char_ids) if char_ids else {}
+    for c in contracts_raw:
+        if c.get("issuer_id"):   c["issuer_name"]   = names.get(c["issuer_id"])
+        if c.get("assignee_id"): c["assignee_name"] = names.get(c["assignee_id"])
+        if c.get("acceptor_id"): c["acceptor_name"] = names.get(c["acceptor_id"])
+    contracts = sorted(contracts_raw, key=lambda c: (c["priority"], _parse_iso(c.get("date_issued")) or now))
+    return {"character_id": character_id, "contracts": contracts}
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────
