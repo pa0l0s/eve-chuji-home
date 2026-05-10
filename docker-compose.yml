@@ -1,0 +1,14 @@
+services:
+  app:
+    image: tiangolo/uvicorn-gunicorn-fastapi:python3.11
+    ports:
+      - "8760:80"
+    volumes:
+      - /srv/dev-disk-by-uuid-38b0ee7f-c1e1-4567-96bd-305378001aeb/nasty2/html/eve-chuji-homepage:/app
+      - /srv/dev-disk-by-uuid-38b0ee7f-c1e1-4567-96bd-305378001aeb/nasty2/html/eve-chuji-homepage/data:/app/data
+    env_file:
+      - /srv/dev-disk-by-uuid-38b0ee7f-c1e1-4567-96bd-305378001aeb/nasty2/html/eve-chuji-homepage/.env
+    environment:
+      - MODULE_NAME=main
+      - WEB_CONCURRENCY=1
+    restart: unless-stopped
