@@ -1,4 +1,5 @@
 import os
+import json
 import base64
 from urllib.parse import urlencode
 
@@ -7,7 +8,6 @@ from itsdangerous import URLSafeSerializer, BadSignature
 
 EVE_SSO_AUTH_URL = "https://login.eveonline.com/v2/oauth/authorize"
 EVE_SSO_TOKEN_URL = "https://login.eveonline.com/v2/oauth/token"
-ESI_VERIFY_URL = "https://esi.evetech.net/verify/"
 
 SCOPES = " ".join([
     "publicData",
@@ -50,20 +50,26 @@ async def exchange_code(code: str) -> dict:
                 "Authorization": f"Basic {_credentials()}",
                 "Content-Type": "application/x-www-form-urlencoded",
             },
-            data={"grant_type": "authorization_code", "code": code},
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": os.getenv("EVE_CALLBACK_URL"),
+            },
         )
         r.raise_for_status()
         return r.json()
 
 
-async def verify_token(access_token: str) -> dict:
-    async with httpx.AsyncClient() as client:
-        r = await client.get(
-            ESI_VERIFY_URL,
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        r.raise_for_status()
-        return r.json()
+def verify_token(access_token: str) -> dict:
+    # Decode JWT payload without network call — ESI /verify/ is deprecated.
+    # The EVE SSO v2 access token is a signed JWT; we trust it since it came
+    # directly from the OAuth2 token exchange.
+    parts = access_token.split(".")
+    padded = parts[1] + "=" * (4 - len(parts[1]) % 4)
+    payload = json.loads(base64.urlsafe_b64decode(padded))
+    # sub format: "CHARACTER:EVE:{characterId}"
+    character_id = int(payload["sub"].split(":")[-1])
+    return {"CharacterID": character_id, "CharacterName": payload["name"]}
 
 
 def make_session_cookie(character_id: int) -> str:

@@ -57,8 +57,12 @@ async def callback(code: str, state: str, request: Request):
 
     try:
         tokens = await exchange_code(code)
-        char_info = await verify_token(tokens["access_token"])
-    except httpx.HTTPError:
+        char_info = verify_token(tokens["access_token"])
+    except httpx.HTTPStatusError as e:
+        print(f"EVE SSO HTTP {e.response.status_code}: {e.response.text}")
+        raise HTTPException(status_code=502, detail="EVE SSO error")
+    except httpx.HTTPError as e:
+        print(f"EVE SSO connection error: {e}")
         raise HTTPException(status_code=502, detail="EVE SSO error")
 
     character_id = char_info["CharacterID"]

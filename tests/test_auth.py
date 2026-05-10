@@ -44,13 +44,12 @@ async def test_exchange_code_returns_tokens():
     assert result["refresh_token"] == "ref_abc"
 
 
-@respx.mock
-async def test_verify_token_returns_character_info():
-    respx.get("https://esi.evetech.net/verify/").mock(
-        return_value=Response(200, json={
-            "CharacterID": 9001,
-            "CharacterName": "Test Pilot",
-        })
-    )
-    result = await verify_token("acc_abc")
+def test_verify_token_decodes_jwt_payload():
+    import base64, json
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"sub": "CHARACTER:EVE:9001", "name": "Test Pilot"}).encode()
+    ).rstrip(b"=").decode()
+    fake_jwt = f"eyJhbGciOiJSUzI1NiJ9.{payload}.fakesig"
+    result = verify_token(fake_jwt)
     assert result["CharacterID"] == 9001
+    assert result["CharacterName"] == "Test Pilot"
