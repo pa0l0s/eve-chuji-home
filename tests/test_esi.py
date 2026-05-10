@@ -3,7 +3,7 @@ import pytest
 import respx
 from httpx import Response
 from db import init_db, upsert_token
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_projects, get_type_name
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_location_name
 
 
 @pytest.fixture(autouse=True)
@@ -94,21 +94,24 @@ async def test_get_skills():
 
 
 @respx.mock
-async def test_get_corp_projects():
-    respx.get("https://esi.evetech.net/latest/corporations/98340844/projects/").mock(
+async def test_get_corp_contracts():
+    respx.get("https://esi.evetech.net/latest/corporations/98340844/contracts/").mock(
         return_value=Response(200, json=[
-            {"project_id": 1, "name": "Test Project", "status": "in_progress"}
-        ])
+            {"contract_id": 1, "type": "courier", "status": "outstanding",
+             "start_location_id": 60003760, "end_location_id": 60003760,
+             "volume": 10000.0, "reward": 5000000.0, "collateral": 0.0}
+        ], headers={"X-Pages": "1"})
     )
-    projects = await get_corp_projects(98340844, "acc_token")
-    assert len(projects) == 1
-    assert projects[0]["name"] == "Test Project"
+    result = await get_corp_contracts(98340844, "acc_token")
+    assert len(result) == 1
+    assert result[0]["type"] == "courier"
 
 
 @respx.mock
-async def test_get_type_name():
-    respx.get("https://esi.evetech.net/latest/universe/types/34/").mock(
-        return_value=Response(200, json={"type_id": 34, "name": "Tritanium"})
+async def test_get_location_name_station():
+    respx.get("https://esi.evetech.net/latest/universe/stations/60003760/").mock(
+        return_value=Response(200, json={"station_id": 60003760,
+            "name": "Jita IV - Moon 4 - Caldari Navy Assembly Plant"})
     )
-    name = await get_type_name(34)
-    assert name == "Tritanium"
+    name = await get_location_name(60003760, "acc_token")
+    assert "Jita" in name

@@ -81,18 +81,35 @@ async def get_skills(character_id: int, access_token: str) -> dict:
         return r.json()
 
 
-async def get_corp_projects(corporation_id: int, access_token: str) -> list:
+async def get_corp_contracts(corporation_id: int, access_token: str) -> list:
+    result = []
+    page = 1
     async with httpx.AsyncClient() as client:
-        r = await client.get(
-            f"{ESI_BASE}/corporations/{corporation_id}/projects/",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        r.raise_for_status()
-        return r.json()
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/corporations/{corporation_id}/contracts/",
+                params={"datasource": "tranquility", "page": page},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            result.extend(r.json())
+            if page >= int(r.headers.get("X-Pages", 1)):
+                break
+            page += 1
+    return result
 
 
-async def get_type_name(type_id: int) -> str:
+async def get_location_name(location_id: int, access_token: str) -> str:
     async with httpx.AsyncClient() as client:
-        r = await client.get(f"{ESI_BASE}/universe/types/{type_id}/")
-        r.raise_for_status()
-        return r.json().get("name", str(type_id))
+        try:
+            if location_id >= 1_000_000_000_000:
+                r = await client.get(
+                    f"{ESI_BASE}/universe/structures/{location_id}/",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+            else:
+                r = await client.get(f"{ESI_BASE}/universe/stations/{location_id}/")
+            r.raise_for_status()
+            return r.json().get("name", str(location_id))
+        except httpx.HTTPError:
+            return str(location_id)

@@ -285,6 +285,52 @@
       font-size: 0.85rem;
     }
 
+    /* ── Contract tabs ── */
+    .tab-strip {
+      display: flex;
+      gap: 0.25rem;
+      margin-bottom: 1.25rem;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      border-bottom: 1px solid #2d3348;
+      padding-bottom: 0;
+    }
+
+    .tab-btn {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      color: #64748b;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .tab-btn:hover { color: #e2e8f0; }
+    .tab-btn.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+
+    .tab-count {
+      background: #252a3d;
+      color: #475569;
+      border-radius: 4px;
+      padding: 0.05rem 0.35rem;
+      font-size: 0.65rem;
+      margin-left: 0.3rem;
+      font-weight: 700;
+    }
+
+    .tab-btn.active .tab-count { background: #0c2233; color: #38bdf8; }
+
+    .contract-pane { max-width: 1200px; margin: 0 auto; }
+
+    .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
+
     /* ── Hidden ── */
     .hidden { display: none !important; }
   </style>
@@ -312,7 +358,7 @@
   <nav>
     <span class="nav-corp">ZLY CHUJI</span>
     <div class="nav-links">
-      <button class="nav-btn active" id="btn-projects" onclick="showView('projects')">Projects</button>
+      <button class="nav-btn active" id="btn-contracts" onclick="showView('contracts')">Contracts</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
     </div>
     <div class="nav-right">
@@ -325,11 +371,24 @@
   </nav>
 
   <main>
-    <!-- Projects view -->
-    <div id="view-projects">
-      <div id="projects-error" class="banner"></div>
-      <div class="page-title">Corporation Projects</div>
-      <div id="projects-grid" class="layout"></div>
+    <!-- Contracts view -->
+    <div id="view-contracts">
+      <div id="contracts-error" class="banner"></div>
+      <div class="page-title">Corporation Contracts</div>
+      <div class="tab-strip">
+        <button class="tab-btn active" id="tab-hauling" onclick="showContractTab('hauling')">
+          Hauling <span class="tab-count" id="count-hauling">0</span>
+        </button>
+        <button class="tab-btn" id="tab-abyssal" onclick="showContractTab('abyssal')">
+          Abyssal <span class="tab-count" id="count-abyssal">0</span>
+        </button>
+        <button class="tab-btn" id="tab-others" onclick="showContractTab('others')">
+          Other <span class="tab-count" id="count-others">0</span>
+        </button>
+      </div>
+      <div id="pane-hauling" class="contract-pane"></div>
+      <div id="pane-abyssal" class="contract-pane hidden"></div>
+      <div id="pane-others"  class="contract-pane hidden"></div>
     </div>
 
     <!-- Member view -->
@@ -344,26 +403,21 @@
 
 <script>
   let currentUser = null;
-  let projectsTimer = null;
+  let contractsTimer = null;
 
   // ── Boot ──────────────────────────────────────────────────────────────────
 
   async function boot() {
     try {
       const r = await fetch('/api/auth/me');
-      if (r.status === 401) {
-        show('view-login');
-        return;
-      }
+      if (r.status === 401) { show('view-login'); return; }
       currentUser = await r.json();
       document.getElementById('nav-portrait').src =
         `https://images.evetech.net/characters/${currentUser.character_id}/portrait?size=64`;
       document.getElementById('nav-name').textContent = currentUser.character_name;
       show('view-app');
-      showView('projects');
-    } catch {
-      show('view-login');
-    }
+      showView('contracts');
+    } catch { show('view-login'); }
   }
 
   // ── View switching ────────────────────────────────────────────────────────
@@ -375,92 +429,137 @@
   }
 
   function showView(view) {
-    document.getElementById('view-projects').classList.toggle('hidden', view !== 'projects');
+    document.getElementById('view-contracts').classList.toggle('hidden', view !== 'contracts');
     document.getElementById('view-member').classList.toggle('hidden', view !== 'member');
-    document.getElementById('btn-projects').classList.toggle('active', view === 'projects');
+    document.getElementById('btn-contracts').classList.toggle('active', view === 'contracts');
     document.getElementById('btn-member').classList.toggle('active', view === 'member');
-
-    if (view === 'projects') loadProjects();
+    if (view === 'contracts') loadContracts();
     if (view === 'member') loadMember();
   }
 
-  // ── Projects ──────────────────────────────────────────────────────────────
+  // ── Contracts ─────────────────────────────────────────────────────────────
 
-  async function loadProjects() {
-    if (projectsTimer) clearTimeout(projectsTimer);
+  async function loadContracts() {
+    if (contractsTimer) clearTimeout(contractsTimer);
     try {
-      const r = await fetch('/api/projects');
+      const r = await fetch('/api/contracts');
       if (!r.ok) {
-        showError('projects-error', r.status === 403
-          ? 'Insufficient corporation roles to view projects.'
-          : 'ESI unavailable — projects could not be loaded.');
+        showError('contracts-error', r.status === 403
+          ? 'Insufficient corporation roles to view contracts.'
+          : 'ESI unavailable — contracts could not be loaded.');
         return;
       }
-      hideError('projects-error');
-      renderProjects(await r.json());
+      hideError('contracts-error');
+      renderContracts(await r.json());
     } catch {
-      showError('projects-error', 'Network error — could not load projects.');
+      showError('contracts-error', 'Network error — could not load contracts.');
     }
-    projectsTimer = setTimeout(loadProjects, 60000);
+    contractsTimer = setTimeout(loadContracts, 120000);
   }
 
-  function renderProjects(projects) {
-    const grid = document.getElementById('projects-grid');
-    if (!projects.length) {
-      grid.innerHTML = '<p style="color:#475569;font-size:0.85rem">No active projects.</p>';
-      return;
-    }
+  function showContractTab(tab) {
+    ['hauling', 'abyssal', 'others'].forEach(t => {
+      document.getElementById('pane-' + t).classList.toggle('hidden', t !== tab);
+      document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+    });
+  }
 
-    grid.innerHTML = projects.map(p => {
-      const items = p.required_deliverables || [];
-      const pct = items.length
-        ? Math.round(
-            items.reduce((s, i) => s + (i.delivered_quantity / (i.required_quantity || 1)), 0)
-            / items.length * 100
-          )
-        : 0;
+  function timeLeft(iso) {
+    if (!iso) return '–';
+    const diff = new Date(iso) - Date.now();
+    if (diff <= 0) return 'Expired';
+    const h = Math.floor(diff / 3600000);
+    if (h < 1) return '<1h';
+    if (h < 24) return h + 'h';
+    return Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
+  }
 
-      const typeLabels = { ItemDelivery: 'Item Delivery', Manual: 'Manual', Buyback: 'Buyback' };
-      const typeLabel = typeLabels[p.type] || p.type || 'Project';
-      const badgeClass = p.type === 'Buyback' ? 'badge-orange'
-                       : p.type === 'Manual'   ? 'badge-muted'
-                       : 'badge-blue';
+  function statusBadge(s) {
+    if (s === 'in_progress') return '<span class="badge badge-green">In Progress</span>';
+    return '<span class="badge badge-blue">Outstanding</span>';
+  }
 
-      const tableHTML = (p.type === 'Buyback' && items.length) ? `
+  function renderContracts(data) {
+    const { hauling = [], abyssal = [], others = [] } = data;
+
+    document.getElementById('count-hauling').textContent = hauling.length;
+    document.getElementById('count-abyssal').textContent = abyssal.length;
+    document.getElementById('count-others').textContent  = others.length;
+
+    // ── Hauling ──
+    document.getElementById('pane-hauling').innerHTML = hauling.length ? `
+      <div class="card full">
         <table>
           <thead><tr>
-            <th>Item</th><th>Required</th><th>Progress</th><th>Corp Buy Price</th>
+            <th>Route</th><th>Volume</th><th>Reward</th><th>Collateral</th><th>Status</th><th>Expires</th>
           </tr></thead>
           <tbody>
-            ${items.map(i => `
+            ${hauling.map(c => `
               <tr>
-                <td>${escHtml(i.type_name || String(i.type_id))}</td>
-                <td>${fmtNum(i.required_quantity)}</td>
-                <td>${Math.round((i.delivered_quantity / (i.required_quantity || 1)) * 100)}%</td>
-                <td>${i.corp_buy_price != null
-                      ? fmtISK(i.corp_buy_price) + ' ISK'
-                      : '<span style="color:#475569">–</span>'}</td>
+                <td style="color:#e2e8f0">
+                  ${escHtml(shortLoc(c.start_name))}
+                  <span style="color:#475569"> → </span>
+                  ${escHtml(shortLoc(c.end_name))}
+                </td>
+                <td>${fmtNum(Math.round(c.volume || 0))} m³</td>
+                <td style="color:#38bdf8">${fmtISK(c.reward || 0)} ISK</td>
+                <td>${fmtISK(c.collateral || 0)} ISK</td>
+                <td>${statusBadge(c.status)}</td>
+                <td>${timeLeft(c.date_expired)}</td>
               </tr>`).join('')}
           </tbody>
-        </table>` : '';
+        </table>
+      </div>` : '<p class="contract-empty">No active hauling contracts.</p>';
 
-      return `
-        <div class="card">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
-            <span style="font-weight:600;color:#f1f5f9">${escHtml(p.name || 'Unnamed Project')}</span>
-            <span class="badge ${badgeClass}">${typeLabel}</span>
-          </div>
-          <div class="progress-wrap">
-            <div class="progress-label">
-              <span>Progress</span><span>${pct}%</span>
-            </div>
-            <div class="progress-bar">
-              <div class="progress-fill" style="width:${pct}%"></div>
-            </div>
-          </div>
-          ${tableHTML}
-        </div>`;
-    }).join('');
+    // ── Abyssal / Auction ──
+    document.getElementById('pane-abyssal').innerHTML = abyssal.length ? `
+      <div class="card full">
+        <table>
+          <thead><tr>
+            <th>Title</th><th>Starting Bid</th><th>Buyout</th><th>Status</th><th>Ends</th>
+          </tr></thead>
+          <tbody>
+            ${abyssal.map(c => `
+              <tr>
+                <td style="color:#e2e8f0">${escHtml(c.title || 'Auction #' + c.contract_id)}</td>
+                <td style="color:#38bdf8">${fmtISK(c.price || 0)} ISK</td>
+                <td>${c.buyout ? fmtISK(c.buyout) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${statusBadge(c.status)}</td>
+                <td>${timeLeft(c.date_expired)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : '<p class="contract-empty">No active abyssal auctions.</p>';
+
+    // ── Others ──
+    const typeLabel = t => ({ item_exchange: 'Item Exchange', courier: 'Courier',
+      auction: 'Auction', loan: 'Loan' }[t] || t || 'Unknown');
+
+    document.getElementById('pane-others').innerHTML = others.length ? `
+      <div class="card full">
+        <table>
+          <thead><tr>
+            <th>Title</th><th>Type</th><th>Price</th><th>Status</th><th>Expires</th>
+          </tr></thead>
+          <tbody>
+            ${others.map(c => `
+              <tr>
+                <td style="color:#e2e8f0">${escHtml(c.title || 'Contract #' + c.contract_id)}</td>
+                <td><span class="badge badge-muted">${typeLabel(c.type)}</span></td>
+                <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${statusBadge(c.status)}</td>
+                <td>${timeLeft(c.date_expired)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : '<p class="contract-empty">No other active contracts.</p>';
+  }
+
+  function shortLoc(name) {
+    if (!name) return '–';
+    // Shorten "Jita IV - Moon 4 - Caldari Navy Assembly Plant" → "Jita IV - Moon 4"
+    const parts = name.split(' - ');
+    return parts.length > 2 ? parts.slice(0, 2).join(' - ') : name;
   }
 
   // ── Member ────────────────────────────────────────────────────────────────

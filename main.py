@@ -11,8 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 import db as database
 from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_projects, get_type_name
-from janice import get_prices_for_items
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_contracts, get_location_name
 
 _corp_id = os.getenv("CORP_ID")
 if not _corp_id:
@@ -114,42 +113,39 @@ async def logout():
 
 # ── Data routes ──────────────────────────────────────────────────────────────
 
-@app.get("/api/projects")
-async def projects(session: str | None = Cookie(None)):
+@app.get("/api/contracts")
+async def contracts(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        raw_projects = await get_corp_projects(CORP_ID, access_token)
+        raw = await get_corp_contracts(CORP_ID, access_token)
     except httpx.HTTPStatusError as e:
+        print(f"ESI contracts HTTP {e.response.status_code}: {e.response.text}")
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Insufficient corporation roles")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
+    except httpx.HTTPError as e:
+        print(f"ESI contracts connection error: {e}")
         raise HTTPException(status_code=502, detail="ESI unavailable")
 
-    # NOTE: Verify ESI "status" field values after first live login and adjust if needed
-    active = [p for p in raw_projects if p.get("status") not in ("completed", "cancelled")]
+    active = [c for c in raw if c.get("status") in ("outstanding", "in_progress")]
 
-    buyback_type_ids: list[int] = []
-    for project in active:
-        if project.get("type") == "Buyback":
-            for item in project.get("required_deliverables", []):
-                buyback_type_ids.append(item["type_id"])
+    hauling = [c for c in active if c.get("type") == "courier"]
+    abyssal = [c for c in active if c.get("type") == "auction"]
+    others  = [c for c in active if c.get("type") not in ("courier", "auction")]
 
-    prices: dict[int, float] = {}
-    type_id_to_name: dict[int, str] = {}
-    if buyback_type_ids:
-        unique_ids = list(set(buyback_type_ids))
-        names = await asyncio.gather(*[get_type_name(tid) for tid in unique_ids])
-        type_id_to_name = dict(zip(unique_ids, names))
-        prices = await get_prices_for_items(type_id_to_name)
+    # Resolve location names for hauling contracts
+    loc_ids = {c.get("start_location_id") for c in hauling} | {c.get("end_location_id") for c in hauling}
+    loc_ids.discard(None)
+    loc_names = dict(zip(
+        loc_ids,
+        await asyncio.gather(*[get_location_name(lid, access_token) for lid in loc_ids])
+    ))
+    for c in hauling:
+        c["start_name"] = loc_names.get(c.get("start_location_id"), str(c.get("start_location_id", "")))
+        c["end_name"]   = loc_names.get(c.get("end_location_id"),   str(c.get("end_location_id", "")))
 
-    for project in active:
-        for item in project.get("required_deliverables", []):
-            item["corp_buy_price"] = prices.get(item["type_id"])
-            item["type_name"] = type_id_to_name.get(item["type_id"])
-
-    return active
+    return {"hauling": hauling, "abyssal": abyssal, "others": others}
 
 
 @app.get("/api/member")

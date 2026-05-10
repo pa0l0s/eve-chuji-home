@@ -55,8 +55,8 @@ async def test_auth_logout_clears_session(client):
     assert "session" not in r.cookies or r.cookies["session"] == ""
 
 
-async def test_projects_returns_401_without_auth(client):
-    r = await client.get("/api/projects")
+async def test_contracts_returns_401_without_auth(client):
+    r = await client.get("/api/contracts")
     assert r.status_code == 401
 
 
