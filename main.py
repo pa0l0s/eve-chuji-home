@@ -3,6 +3,7 @@ import time
 import secrets
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone, timedelta
 
 import httpx
 from fastapi import FastAPI, Cookie, HTTPException, Request
@@ -14,6 +15,7 @@ from auth import build_login_url, exchange_code, verify_token, make_session_cook
 from esi import (
     get_valid_token, get_character, get_wallet, get_skills,
     get_character_location, get_character_online, get_character_ship,
+    get_character_contracts,
     get_corp_contracts, get_corp_projects,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
@@ -317,18 +319,74 @@ async def starbase_detail(starbase_id: int, system_id: int,
     return detail
 
 
+def _parse_iso(s: str | None):
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _classify_contract(c: dict, now: datetime) -> dict:
+    """Returns {category, priority, attention_reason, time_left_sec}.
+    category ∈ {'critical', 'warning', 'ok', 'done'}; lower priority floats to top."""
+    status   = c.get("status")
+    expired  = _parse_iso(c.get("date_expired"))
+    accepted = _parse_iso(c.get("date_accepted"))
+    days     = c.get("days_to_complete") or 0
+    deadline = accepted + timedelta(days=days) if (accepted and days) else None
+
+    if status == "failed":
+        return {"category": "critical", "priority": 0,
+                "attention": "Failed — collateral consequences", "time_left_sec": None}
+    if status == "rejected":
+        return {"category": "critical", "priority": 4,
+                "attention": "Rejected by recipient", "time_left_sec": None}
+    if status == "outstanding":
+        if expired and expired <= now:
+            return {"category": "critical", "priority": 1,
+                    "attention": "Expired without acceptance", "time_left_sec": 0}
+        if expired:
+            secs = (expired - now).total_seconds()
+            if secs < 86400:
+                return {"category": "warning", "priority": 10,
+                        "attention": "Expires in < 24h", "time_left_sec": secs}
+            if secs < 172800:
+                return {"category": "warning", "priority": 12,
+                        "attention": "Expires in < 48h", "time_left_sec": secs}
+            return {"category": "ok", "priority": 50,
+                    "attention": None, "time_left_sec": secs}
+    if status == "in_progress":
+        if deadline and deadline <= now:
+            return {"category": "critical", "priority": 2,
+                    "attention": "Past delivery deadline", "time_left_sec": 0}
+        if deadline:
+            secs = (deadline - now).total_seconds()
+            if secs < 86400:
+                return {"category": "warning", "priority": 11,
+                        "attention": "Deadline in < 24h", "time_left_sec": secs}
+            return {"category": "ok", "priority": 40,
+                    "attention": None, "time_left_sec": secs}
+        return {"category": "ok", "priority": 45,
+                "attention": None, "time_left_sec": None}
+    return {"category": "done", "priority": 1000,
+            "attention": None, "time_left_sec": None}
+
+
 @app.get("/api/member")
 async def member(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        char_data, wallet, skills, location, online, ship = await asyncio.gather(
+        char_data, wallet, skills, location, online, ship, contracts_raw = await asyncio.gather(
             get_character(character_id, access_token),
             get_wallet(character_id, access_token),
             get_skills(character_id, access_token),
             get_character_location(character_id, access_token),
             get_character_online(character_id, access_token),
             get_character_ship(character_id, access_token),
+            get_character_contracts(character_id, access_token),
         )
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="ESI unavailable")
@@ -349,6 +407,21 @@ async def member(session: str | None = Cookie(None)):
         docked_name = info["name"]
 
     ship_type = await get_type_info(ship["ship_type_id"]) if ship.get("ship_type_id") else {}
+
+    now = datetime.now(timezone.utc)
+    char_ids_for_names = []
+    for c in contracts_raw:
+        meta = _classify_contract(c, now)
+        c.update(meta)
+        for k in ("issuer_id", "assignee_id", "acceptor_id"):
+            if c.get(k):
+                char_ids_for_names.append(c[k])
+    contract_names = await resolve_names(char_ids_for_names) if char_ids_for_names else {}
+    for c in contracts_raw:
+        if c.get("issuer_id"):   c["issuer_name"]   = contract_names.get(c["issuer_id"])
+        if c.get("assignee_id"): c["assignee_name"] = contract_names.get(c["assignee_id"])
+        if c.get("acceptor_id"): c["acceptor_name"] = contract_names.get(c["acceptor_id"])
+    contracts = sorted(contracts_raw, key=lambda c: (c["priority"], _parse_iso(c.get("date_issued")) or now))
 
     return {
         "character_id": character_id,
@@ -375,6 +448,7 @@ async def member(session: str | None = Cookie(None)):
             "type_name": ship_type.get("name"),
             "name": ship.get("ship_name"),
         },
+        "contracts": contracts,
     }
 
 

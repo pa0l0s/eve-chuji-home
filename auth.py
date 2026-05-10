@@ -11,6 +11,7 @@ EVE_SSO_TOKEN_URL = "https://login.eveonline.com/v2/oauth/token"
 
 SCOPES = " ".join([
     "publicData",
+    "esi-contracts.read_character_contracts.v1",
     "esi-contracts.read_corporation_contracts.v1",
     "esi-corporations.read_projects.v1",
     "esi-corporations.read_starbases.v1",

@@ -143,6 +143,24 @@ async def get_character_ship(character_id: int, access_token: str) -> dict:
         return data
 
 
+async def get_character_contracts(character_id: int, access_token: str) -> list:
+    result = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/characters/{character_id}/contracts/",
+                params={"datasource": "tranquility", "page": page},
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            r.raise_for_status()
+            result.extend(r.json())
+            if page >= int(r.headers.get("X-Pages", 1)):
+                break
+            page += 1
+    return result
+
+
 async def get_corp_contracts(corporation_id: int, access_token: str) -> list:
     result = []
     page = 1
