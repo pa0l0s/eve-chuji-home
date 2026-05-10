@@ -176,6 +176,12 @@
     .badge-green  { background: #052e16; color: #4ade80; }
     .badge-muted  { background: #1e2130; color: #475569; border: 1px solid #2d3348; }
     .badge-orange { background: #2d1a00; color: #fb923c; }
+    .badge-red    { background: #450a0a; color: #fca5a5; }
+
+    .card-warn {
+      border-color: #ef4444;
+      box-shadow: 0 0 0 1px #ef4444, 0 0 12px rgba(239, 68, 68, 0.2);
+    }
 
     /* ── Table ── */
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.75rem; }
@@ -937,11 +943,39 @@
            <div class="val">${fmtISK(p.reward.remaining || 0)}<span class="unit">/ ${fmtISK(p.reward.initial || 0)} ISK</span></div>
          </div>`
       : '';
+    const m = p.market;
+    const needsUpdate = m?.needs_update;
+    const cardClass = needsUpdate ? 'card card-warn' : 'card';
+    const updateBadge = needsUpdate
+      ? '<span class="badge badge-red" style="margin-left:0.4rem">Update</span>'
+      : '';
+    const marketBlock = m ? `
+      <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid #2d3348;font-size:0.75rem">
+        <div style="display:flex;justify-content:space-between;color:#94a3b8;margin-bottom:0.2rem">
+          <span>Project Price</span>
+          <span style="color:${needsUpdate ? '#fca5a5' : '#e2e8f0'};font-weight:600">
+            ${fmtISK(m.project_price)} ISK/u
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:#64748b">
+          <span>Jita 4-4 buy max × ${(m.target_price / m.jita_buy_max).toFixed(2)}</span>
+          <span style="color:#94a3b8">${fmtISK(m.target_price)} ISK/u</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;color:#475569;font-size:0.7rem;margin-top:0.15rem">
+          <span>Market high (Jita 4-4)</span>
+          <span>${fmtISK(m.jita_buy_max)} ISK/u</span>
+        </div>
+        ${needsUpdate
+          ? `<div style="margin-top:0.4rem;font-size:0.7rem;color:#f87171">
+               Off by ${(m.diff_ratio * 100).toFixed(1)}% — review reward
+             </div>`
+          : ''}
+      </div>` : '';
     return `
-      <div class="card">
+      <div class="${cardClass}">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:0.5rem;margin-bottom:0.75rem">
           <div style="font-size:0.95rem;font-weight:600;color:#f8fafc">${escHtml(p.name)}</div>
-          ${stateBadge(p.state)}
+          <div>${stateBadge(p.state)}${updateBadge}</div>
         </div>
         <div class="progress-wrap">
           <div class="progress-label">
@@ -951,6 +985,7 @@
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
         ${reward}
+        ${marketBlock}
         <div style="margin-top:0.75rem;font-size:0.7rem;color:#475569">
           Last modified: ${new Date(p.last_modified).toLocaleDateString()}
         </div>

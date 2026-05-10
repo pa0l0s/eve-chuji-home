@@ -18,7 +18,8 @@ from esi import (
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_system_info,
-    resolve_names,
+    resolve_names, resolve_type_ids, get_jita_buy_max,
+    MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
 )
 from db import cache_structure_name
 
@@ -200,7 +201,44 @@ async def projects(session: str | None = Cookie(None)):
 
     active = [p for p in raw if p.get("state") == "Active"]
     closed = [p for p in raw if p.get("state") in ("Completed", "Closed", "Expired")]
-    return {"active": active, "closed": closed}
+
+    # Resolve project names → type_ids, then fetch Jita 4-4 highest buy per type.
+    names = list({p["name"] for p in active if p.get("name")})
+    name_to_type = await resolve_type_ids(names)
+    needed_ids = list(set(name_to_type.values()))
+    buy_maxes: dict[int, float | None] = {}
+    if needed_ids:
+        buy_max_list = await asyncio.gather(*[get_jita_buy_max(t) for t in needed_ids])
+        buy_maxes = dict(zip(needed_ids, buy_max_list))
+
+    for p in active:
+        tid = name_to_type.get(p.get("name"))
+        buy_max = buy_maxes.get(tid) if tid else None
+        desired = (p.get("progress") or {}).get("desired") or 0
+        reward = p.get("reward") or {}
+        initial = reward.get("initial")
+        if not (tid and buy_max and desired and initial):
+            continue
+        project_price = initial / desired
+        target_price  = buy_max * MARKET_TARGET_RATIO
+        diff_ratio    = abs(project_price - target_price) / target_price
+        p["market"] = {
+            "type_id": tid,
+            "jita_buy_max": buy_max,
+            "target_price": target_price,
+            "project_price": project_price,
+            "diff_ratio": diff_ratio,
+            "needs_update": diff_ratio > PRICE_DIFF_THRESHOLD,
+        }
+
+    return {
+        "active": active,
+        "closed": closed,
+        "market_config": {
+            "target_ratio": MARKET_TARGET_RATIO,
+            "diff_threshold": PRICE_DIFF_THRESHOLD,
+        },
+    }
 
 
 @app.get("/api/structures")

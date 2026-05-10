@@ -14,6 +14,14 @@ from db import (
 ESI_BASE = "https://esi.evetech.net/latest"
 EVE_SSO_TOKEN_URL = "https://login.eveonline.com/v2/oauth/token"
 
+JITA_44_STATION_ID = 60003760
+FORGE_REGION_ID    = 10000002
+
+# Project price comparison: target = jita_buy_max * MARKET_TARGET_RATIO.
+# Flag if |project_price - target| / target > PRICE_DIFF_THRESHOLD.
+MARKET_TARGET_RATIO  = float(os.getenv("MARKET_TARGET_RATIO", "0.9"))
+PRICE_DIFF_THRESHOLD = float(os.getenv("PRICE_DIFF_THRESHOLD", "0.15"))
+
 
 def _credentials() -> str:
     cid = os.getenv("EVE_CLIENT_ID")
@@ -285,6 +293,37 @@ async def get_system_info(system_id: int) -> dict:
             return {"name": name, "security_status": sec}
         except httpx.HTTPError:
             return {"name": f"System #{system_id}", "security_status": None}
+
+
+async def resolve_type_ids(names: list[str]) -> dict[str, int]:
+    """Bulk-resolve EVE item names to type_ids via /universe/ids/."""
+    clean = list({n for n in names if n})
+    if not clean:
+        return {}
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.post(f"{ESI_BASE}/universe/ids/", json=clean)
+            r.raise_for_status()
+            data = r.json()
+            return {item["name"]: item["id"] for item in data.get("inventory_types", [])}
+        except httpx.HTTPError:
+            return {}
+
+
+async def get_jita_buy_max(type_id: int) -> float | None:
+    """Highest buy order price in Jita 4-4 for the given type, or None."""
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(
+                f"{ESI_BASE}/markets/{FORGE_REGION_ID}/orders/",
+                params={"order_type": "buy", "type_id": type_id, "page": 1},
+            )
+            r.raise_for_status()
+            jita = [o["price"] for o in r.json()
+                    if o.get("location_id") == JITA_44_STATION_ID]
+            return max(jita) if jita else None
+        except httpx.HTTPError:
+            return None
 
 
 async def get_corp_structures(corporation_id: int, access_token: str) -> list:
