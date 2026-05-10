@@ -18,6 +18,7 @@ from esi import (
     get_location_name, get_structure_info, get_type_info, get_system_info,
     resolve_names,
 )
+from db import cache_structure_name
 
 _corp_id = os.getenv("CORP_ID")
 if not _corp_id:
@@ -240,6 +241,13 @@ async def structures(session: str | None = Cookie(None)):
         if sy:
             s["system_name"] = sy["name"]
             s["security_status"] = sy.get("security_status")
+
+    # Seed structure_cache from corp citadel listing so non-directors viewing
+    # contracts get full names/types without needing docking rights.
+    await asyncio.gather(*[
+        cache_structure_name(c["structure_id"], c["name"], c.get("type_id"), c.get("system_id"))
+        for c in citadels if c.get("structure_id") and c.get("name")
+    ])
 
     return {"citadels": citadels, "starbases": starbases}
 
