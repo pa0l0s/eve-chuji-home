@@ -8,7 +8,23 @@ from esi import (
     get_corp_contracts, get_corp_projects,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_type_info, get_system_info, resolve_names,
+    _decode_python_literal,
 )
+
+
+def test_decode_python_literal_normal():
+    assert _decode_python_literal("My Ship") == "My Ship"
+
+
+def test_decode_python_literal_unwraps():
+    assert _decode_python_literal("u'\\u271a1'") == "✚1"
+    assert _decode_python_literal('u"\\u271a Guardian"') == "✚ Guardian"
+
+
+def test_decode_python_literal_safe_on_garbage():
+    assert _decode_python_literal("u'broken") == "u'broken"
+    assert _decode_python_literal(None) is None
+    assert _decode_python_literal("") == ""
 
 
 @pytest.fixture(autouse=True)

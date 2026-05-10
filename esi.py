@@ -1,3 +1,4 @@
+import ast
 import os
 import time
 import base64
@@ -115,6 +116,20 @@ async def get_character_online(character_id: int, access_token: str) -> dict:
         return r.json()
 
 
+def _decode_python_literal(s):
+    """Unwrap Python-2-style unicode literals like u'\\u271a1' to '✚1'.
+    Safe: only acts on strings starting with u' or u" and uses ast.literal_eval."""
+    if not isinstance(s, str):
+        return s
+    if not (s.startswith(("u'", 'u"')) and s.endswith(("'", '"'))):
+        return s
+    try:
+        result = ast.literal_eval(s)
+        return result if isinstance(result, str) else s
+    except (ValueError, SyntaxError):
+        return s
+
+
 async def get_character_ship(character_id: int, access_token: str) -> dict:
     async with httpx.AsyncClient() as client:
         r = await client.get(
@@ -122,7 +137,10 @@ async def get_character_ship(character_id: int, access_token: str) -> dict:
             headers={"Authorization": f"Bearer {access_token}"},
         )
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+        if "ship_name" in data:
+            data["ship_name"] = _decode_python_literal(data["ship_name"])
+        return data
 
 
 async def get_corp_contracts(corporation_id: int, access_token: str) -> list:
