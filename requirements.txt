@@ -1,0 +1,8 @@
+fastapi
+httpx
+aiosqlite
+itsdangerous
+python-dotenv
+pytest
+pytest-asyncio
+respx
