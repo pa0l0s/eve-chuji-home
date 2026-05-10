@@ -163,8 +163,8 @@ async def _fetch_structure(structure_id: int, access_token: str) -> dict | None:
 async def get_structure_info(structure_id: int, access_token: str) -> dict:
     """Returns {name, type_id, system_id} for a citadel. Caches successful lookups."""
     cached = await get_cached_structure(structure_id)
-    if cached and cached.get("name"):
-        return cached
+    if cached and cached.get("name") and cached.get("type_id"):
+        return cached  # Fully resolved.
 
     info = await _fetch_structure(structure_id, access_token)
     if not info or not info.get("name"):
@@ -184,6 +184,8 @@ async def get_structure_info(structure_id: int, access_token: str) -> dict:
             structure_id, info["name"], info.get("type_id"), info.get("system_id")
         )
         return info
+    if cached and cached.get("name"):
+        return cached  # Fetch failed but we have a stale name.
     return {"name": f"Citadel #{str(structure_id)[-5:]}", "type_id": None, "system_id": None}
 
 
