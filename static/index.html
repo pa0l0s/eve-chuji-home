@@ -359,24 +359,26 @@
     /* ── System links ── */
     .sys-link {
       display: inline-flex;
-      gap: 0.2rem;
-      margin-left: 0.35rem;
+      gap: 0.25rem;
+      margin-left: 0.4rem;
       vertical-align: middle;
     }
 
     .sys-link a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
       background: #252a3d;
-      color: #64748b;
-      font-size: 0.6rem;
-      font-weight: 700;
-      padding: 0.05rem 0.3rem;
       border-radius: 3px;
       text-decoration: none;
-      letter-spacing: 0.05em;
-      transition: color 0.15s, background 0.15s;
+      transition: background 0.15s, transform 0.1s;
     }
 
-    .sys-link a:hover { background: #38bdf8; color: #0f1117; }
+    .sys-link a:hover { background: #38bdf8; }
+    .sys-link a:active { transform: translateY(1px); }
+    .sys-link img { width: 12px; height: 12px; display: block; }
 
     /* ── Hidden ── */
     .hidden { display: none !important; }
@@ -686,8 +688,12 @@
   function systemLinks(name, id) {
     if (!id || !name) return '';
     return `<span class="sys-link">
-      <a href="https://zkillboard.com/system/${id}/" target="_blank" rel="noopener" title="zKillboard">zK</a>
-      <a href="https://evemaps.dotlan.net/system/${encodeURIComponent(name)}" target="_blank" rel="noopener" title="Dotlan">DT</a>
+      <a href="https://zkillboard.com/system/${id}/" target="_blank" rel="noopener" title="zKillboard">
+        <img src="https://www.google.com/s2/favicons?sz=32&domain=zkillboard.com" alt="zK">
+      </a>
+      <a href="https://evemaps.dotlan.net/system/${encodeURIComponent(name)}" target="_blank" rel="noopener" title="Dotlan">
+        <img src="https://www.google.com/s2/favicons?sz=32&domain=evemaps.dotlan.net" alt="DT">
+      </a>
     </span>`;
   }
 
