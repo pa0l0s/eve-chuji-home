@@ -1,1 +1,568 @@
-<!DOCTYPE html><html><body>placeholder</body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grupa Operacyjna ZLY CHUJI</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+    }
+
+    /* ── Nav ── */
+    nav {
+      background: #1e2130;
+      border-bottom: 1px solid #2d3348;
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-corp { font-weight: 700; font-size: 1rem; color: #f8fafc; letter-spacing: 0.03em; }
+
+    .nav-links { display: flex; gap: 0.25rem; }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .nav-btn:hover { color: #e2e8f0; background: #252a3d; }
+    .nav-btn.active { color: #38bdf8; background: #0c2233; }
+
+    .nav-right { display: flex; align-items: center; gap: 0.75rem; }
+
+    .nav-char { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #94a3b8; }
+
+    .nav-portrait {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      border: 1px solid #2d3348;
+      background: #252a3d;
+    }
+
+    .btn-logout {
+      background: none;
+      border: 1px solid #2d3348;
+      color: #64748b;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+
+    .btn-logout:hover { color: #f87171; border-color: #f87171; }
+
+    /* ── Layout ── */
+    main { padding: 2rem; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.25rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .page-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 1.5rem;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: #1e2130;
+      border: 1px solid #2d3348;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .card.full { grid-column: 1 / -1; }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Metric ── */
+    .metric {
+      background: #252a3d;
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+    }
+
+    .metric .label {
+      font-size: 0.7rem;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.3rem;
+    }
+
+    .metric .val { font-size: 1.6rem; font-weight: 700; color: #38bdf8; }
+    .metric .unit { font-size: 0.8rem; color: #475569; margin-left: 0.2rem; }
+
+    /* ── Progress ── */
+    .progress-wrap { margin-top: 0.5rem; }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-bottom: 0.35rem;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #252a3d;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #38bdf8;
+      border-radius: 3px;
+      transition: width 0.4s ease;
+    }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      border-radius: 4px;
+      padding: 0.1rem 0.45rem;
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-blue   { background: #0c2233; color: #38bdf8; }
+    .badge-green  { background: #052e16; color: #4ade80; }
+    .badge-muted  { background: #1e2130; color: #475569; border: 1px solid #2d3348; }
+    .badge-orange { background: #2d1a00; color: #fb923c; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.75rem; }
+
+    th {
+      text-align: left;
+      padding: 0.4rem 0.6rem;
+      color: #475569;
+      font-weight: 500;
+      font-size: 0.72rem;
+      border-bottom: 1px solid #2d3348;
+    }
+
+    td { padding: 0.6rem 0.6rem; border-bottom: 1px solid #1a1e2e; color: #94a3b8; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Character card ── */
+    .char-card {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .char-portrait {
+      width: 80px;
+      height: 80px;
+      border-radius: 8px;
+      border: 1px solid #2d3348;
+      background: #252a3d;
+    }
+
+    .char-info .name { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
+    .char-info .corp { font-size: 0.8rem; color: #64748b; margin-top: 0.2rem; }
+
+    .sec-status {
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-top: 0.4rem;
+    }
+
+    /* ── Metrics grid ── */
+    .metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1rem; }
+
+    /* ── Banner ── */
+    .banner {
+      background: #450a0a;
+      border: 1px solid #ef4444;
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      margin-bottom: 1.25rem;
+      color: #fca5a5;
+      font-size: 0.8rem;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      display: none;
+    }
+
+    .banner.show { display: block; }
+
+    /* ── Login view ── */
+    #view-login {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .login-card {
+      background: #1e2130;
+      border: 1px solid #2d3348;
+      border-radius: 16px;
+      padding: 3rem 2.5rem;
+      text-align: center;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .login-corp {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 0.4rem;
+    }
+
+    .login-sub {
+      font-size: 0.8rem;
+      color: #475569;
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .login-btn {
+      display: inline-block;
+      margin-top: 0.5rem;
+    }
+
+    .login-btn img {
+      height: 38px;
+      transition: opacity 0.15s;
+    }
+
+    .login-btn:hover img { opacity: 0.85; }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      color: #475569;
+      font-size: 0.85rem;
+    }
+
+    /* ── Hidden ── */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<!-- Loading spinner -->
+<div id="view-loading" class="spinner">Loading…</div>
+
+<!-- Login view -->
+<div id="view-login" class="hidden">
+  <div class="login-card">
+    <div class="login-corp">Grupa Operacyjna</div>
+    <div class="login-corp" style="color:#38bdf8">ZLY CHUJI</div>
+    <div class="login-sub">Corporation Portal · Members Only</div>
+    <a href="/api/auth/login" class="login-btn">
+      <img src="https://web.ccpgames.com/eve-sso/img/eve-sso-login-black-small.png" alt="Login with EVE Online">
+    </a>
+  </div>
+</div>
+
+<!-- App shell (shown when authenticated) -->
+<div id="view-app" class="hidden">
+
+  <nav>
+    <span class="nav-corp">ZLY CHUJI</span>
+    <div class="nav-links">
+      <button class="nav-btn active" id="btn-projects" onclick="showView('projects')">Projects</button>
+      <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
+    </div>
+    <div class="nav-right">
+      <div class="nav-char">
+        <img id="nav-portrait" class="nav-portrait" src="" alt="">
+        <span id="nav-name"></span>
+      </div>
+      <a href="/api/auth/logout"><button class="btn-logout">Logout</button></a>
+    </div>
+  </nav>
+
+  <main>
+    <!-- Projects view -->
+    <div id="view-projects">
+      <div id="projects-error" class="banner"></div>
+      <div class="page-title">Corporation Projects</div>
+      <div id="projects-grid" class="layout"></div>
+    </div>
+
+    <!-- Member view -->
+    <div id="view-member" class="hidden">
+      <div id="member-error" class="banner"></div>
+      <div class="page-title">Member Profile</div>
+      <div id="member-grid" class="layout"></div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  let currentUser = null;
+  let projectsTimer = null;
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+
+  async function boot() {
+    try {
+      const r = await fetch('/api/auth/me');
+      if (r.status === 401) {
+        show('view-login');
+        return;
+      }
+      currentUser = await r.json();
+      document.getElementById('nav-portrait').src =
+        `https://images.evetech.net/characters/${currentUser.character_id}/portrait?size=64`;
+      document.getElementById('nav-name').textContent = currentUser.character_name;
+      show('view-app');
+      showView('projects');
+    } catch {
+      show('view-login');
+    }
+  }
+
+  // ── View switching ────────────────────────────────────────────────────────
+
+  function show(id) {
+    ['view-loading', 'view-login', 'view-app'].forEach(v =>
+      document.getElementById(v).classList.toggle('hidden', v !== id)
+    );
+  }
+
+  function showView(view) {
+    document.getElementById('view-projects').classList.toggle('hidden', view !== 'projects');
+    document.getElementById('view-member').classList.toggle('hidden', view !== 'member');
+    document.getElementById('btn-projects').classList.toggle('active', view === 'projects');
+    document.getElementById('btn-member').classList.toggle('active', view === 'member');
+
+    if (view === 'projects') loadProjects();
+    if (view === 'member') loadMember();
+  }
+
+  // ── Projects ──────────────────────────────────────────────────────────────
+
+  async function loadProjects() {
+    if (projectsTimer) clearTimeout(projectsTimer);
+    try {
+      const r = await fetch('/api/projects');
+      if (!r.ok) {
+        showError('projects-error', r.status === 403
+          ? 'Insufficient corporation roles to view projects.'
+          : 'ESI unavailable — projects could not be loaded.');
+        return;
+      }
+      hideError('projects-error');
+      renderProjects(await r.json());
+    } catch {
+      showError('projects-error', 'Network error — could not load projects.');
+    }
+    projectsTimer = setTimeout(loadProjects, 60000);
+  }
+
+  function renderProjects(projects) {
+    const grid = document.getElementById('projects-grid');
+    if (!projects.length) {
+      grid.innerHTML = '<p style="color:#475569;font-size:0.85rem">No active projects.</p>';
+      return;
+    }
+
+    grid.innerHTML = projects.map(p => {
+      const items = p.required_deliverables || [];
+      const pct = items.length
+        ? Math.round(
+            items.reduce((s, i) => s + (i.delivered_quantity / (i.required_quantity || 1)), 0)
+            / items.length * 100
+          )
+        : 0;
+
+      const typeLabels = { ItemDelivery: 'Item Delivery', Manual: 'Manual', Buyback: 'Buyback' };
+      const typeLabel = typeLabels[p.type] || p.type || 'Project';
+      const badgeClass = p.type === 'Buyback' ? 'badge-orange'
+                       : p.type === 'Manual'   ? 'badge-muted'
+                       : 'badge-blue';
+
+      const tableHTML = (p.type === 'Buyback' && items.length) ? `
+        <table>
+          <thead><tr>
+            <th>Item</th><th>Required</th><th>Progress</th><th>Corp Buy Price</th>
+          </tr></thead>
+          <tbody>
+            ${items.map(i => `
+              <tr>
+                <td>${escHtml(i.type_name || String(i.type_id))}</td>
+                <td>${fmtNum(i.required_quantity)}</td>
+                <td>${Math.round((i.delivered_quantity / (i.required_quantity || 1)) * 100)}%</td>
+                <td>${i.corp_buy_price != null
+                      ? fmtISK(i.corp_buy_price) + ' ISK'
+                      : '<span style="color:#475569">–</span>'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>` : '';
+
+      return `
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+            <span style="font-weight:600;color:#f1f5f9">${escHtml(p.name || 'Unnamed Project')}</span>
+            <span class="badge ${badgeClass}">${typeLabel}</span>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-label">
+              <span>Progress</span><span>${pct}%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${pct}%"></div>
+            </div>
+          </div>
+          ${tableHTML}
+        </div>`;
+    }).join('');
+  }
+
+  // ── Member ────────────────────────────────────────────────────────────────
+
+  async function loadMember() {
+    try {
+      const r = await fetch('/api/member');
+      if (!r.ok) {
+        showError('member-error', 'ESI unavailable — member data could not be loaded.');
+        return;
+      }
+      hideError('member-error');
+      renderMember(await r.json());
+    } catch {
+      showError('member-error', 'Network error — could not load member data.');
+    }
+  }
+
+  function renderMember(m) {
+    const secColor = m.security_status >= 0 ? '#4ade80' : '#f87171';
+    const secSign  = m.security_status >= 0 ? '+' : '';
+    const trainingBadge = m.training_active
+      ? '<span class="badge badge-green">Training</span>'
+      : '<span class="badge badge-muted">Idle</span>';
+
+    document.getElementById('member-grid').innerHTML = `
+      <div class="card">
+        <div class="card-title">Character</div>
+        <div class="char-card">
+          <img class="char-portrait"
+               src="https://images.evetech.net/characters/${m.character_id}/portrait?size=128" alt="">
+          <div class="char-info">
+            <div class="name">${escHtml(m.character_name)}</div>
+            <div class="corp" id="corp-name-display">Corp ID: ${m.corporation_id}</div>
+            <div class="sec-status" style="color:${secColor}">
+              Security Status: ${secSign}${m.security_status.toFixed(1)}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Financials &amp; Skills</div>
+        <div class="metrics">
+          <div class="metric">
+            <div class="label">Wallet Balance</div>
+            <div class="val">${fmtISK(m.wallet_balance)}<span class="unit">ISK</span></div>
+          </div>
+          <div class="metric">
+            <div class="label">Total Skillpoints</div>
+            <div class="val">${fmtSP(m.total_sp)}<span class="unit">SP</span></div>
+          </div>
+        </div>
+        <div style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;
+                    text-transform:uppercase;letter-spacing:0.06em">
+          Skill Queue &nbsp; ${trainingBadge}
+        </div>
+      </div>`;
+
+    fetch(`https://esi.evetech.net/latest/corporations/${m.corporation_id}/`)
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('corp-name-display');
+        if (el && d.name) el.textContent = d.name;
+      })
+      .catch(() => {});
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  function fmtISK(n) {
+    if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T';
+    if (n >= 1e9)  return (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6)  return (n / 1e6).toFixed(2) + 'M';
+    return new Intl.NumberFormat().format(Math.round(n));
+  }
+
+  function fmtSP(n) {
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+    return String(n);
+  }
+
+  function fmtNum(n) { return new Intl.NumberFormat().format(n); }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  function hideError(id) {
+    document.getElementById(id).classList.remove('show');
+  }
+
+  boot();
+</script>
+</body>
+</html>
