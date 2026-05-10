@@ -3,7 +3,7 @@ import pytest
 import respx
 from httpx import Response
 from db import init_db, upsert_token
-from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_projects
+from esi import get_valid_token, get_character, get_wallet, get_skills, get_corp_projects, get_type_name
 
 
 @pytest.fixture(autouse=True)
@@ -103,3 +103,12 @@ async def test_get_corp_projects():
     projects = await get_corp_projects(98340844, "acc_token")
     assert len(projects) == 1
     assert projects[0]["name"] == "Test Project"
+
+
+@respx.mock
+async def test_get_type_name():
+    respx.get("https://esi.evetech.net/latest/universe/types/34/").mock(
+        return_value=Response(200, json={"type_id": 34, "name": "Tritanium"})
+    )
+    name = await get_type_name(34)
+    assert name == "Tritanium"

@@ -89,3 +89,10 @@ async def get_corp_projects(corporation_id: int, access_token: str) -> list:
         )
         r.raise_for_status()
         return r.json()
+
+
+async def get_type_name(type_id: int) -> str:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{ESI_BASE}/universe/types/{type_id}/")
+        r.raise_for_status()
+        return r.json().get("name", str(type_id))
