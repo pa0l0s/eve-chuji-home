@@ -30,6 +30,13 @@ async def init_db():
                 cached_at REAL    NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS structure_cache (
+                structure_id INTEGER PRIMARY KEY,
+                name         TEXT    NOT NULL,
+                cached_at    REAL    NOT NULL
+            )
+        """)
         await db.commit()
 
 
@@ -80,3 +87,29 @@ async def get_janice_cache(item_id: int) -> dict | None:
         async with db.execute("SELECT * FROM janice_cache WHERE item_id = ?", (item_id,)) as cur:
             row = await cur.fetchone()
             return dict(row) if row else None
+
+
+async def get_cached_structure(structure_id: int) -> str | None:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute("SELECT name FROM structure_cache WHERE structure_id = ?",
+                              (structure_id,)) as cur:
+            row = await cur.fetchone()
+            return row[0] if row else None
+
+
+async def cache_structure_name(structure_id: int, name: str):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute("""
+            INSERT INTO structure_cache (structure_id, name, cached_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(structure_id) DO UPDATE SET
+                name = excluded.name,
+                cached_at = excluded.cached_at
+        """, (structure_id, name, time.time()))
+        await db.commit()
+
+
+async def list_all_character_ids() -> list[int]:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute("SELECT character_id FROM tokens") as cur:
+            return [r[0] for r in await cur.fetchall()]

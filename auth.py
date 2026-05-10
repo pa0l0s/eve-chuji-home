@@ -13,6 +13,7 @@ SCOPES = " ".join([
     "publicData",
     "esi-contracts.read_corporation_contracts.v1",
     "esi-corporations.read_projects.v1",
+    "esi-universe.read_structures.v1",
     "esi-wallet.read_character_wallet.v1",
     "esi-skills.read_skills.v1",
     "esi-characters.read_corporation_roles.v1",

@@ -151,3 +151,24 @@ async def test_get_location_name_station():
     )
     name = await get_location_name(60003760, "acc_token")
     assert "Jita" in name
+
+
+@respx.mock
+async def test_get_location_name_structure_caches():
+    respx.get("https://esi.evetech.net/latest/universe/structures/1046603361682/").mock(
+        return_value=Response(200, json={"name": "Amarr Assembly Plant"})
+    )
+    name = await get_location_name(1046603361682, "acc_token")
+    assert name == "Amarr Assembly Plant"
+    # Second call hits cache (no respx mock for second request).
+    name2 = await get_location_name(1046603361682, "acc_token")
+    assert name2 == "Amarr Assembly Plant"
+
+
+@respx.mock
+async def test_get_location_name_structure_fallback_label():
+    respx.get("https://esi.evetech.net/latest/universe/structures/1099999999999/").mock(
+        return_value=Response(403, json={"error": "Forbidden"})
+    )
+    name = await get_location_name(1099999999999, "acc_token")
+    assert name.startswith("Citadel #")
