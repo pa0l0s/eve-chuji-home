@@ -858,6 +858,15 @@
     return escHtml(shortLoc(name)) + typeBadge + systemLinks(sysName, sysId);
   }
 
+  function characterZkillLink(id) {
+    if (!id) return '';
+    return `<span class="sys-link" style="margin-left:0">
+      <a href="https://zkillboard.com/character/${id}/" target="_blank" rel="noopener" title="zKillboard">
+        <img src="https://www.google.com/s2/favicons?sz=32&domain=zkillboard.com" alt="zK">
+      </a>
+    </span>`;
+  }
+
   function systemLinks(name, id) {
     if (!id || !name) return '';
     return `<span class="sys-link">
@@ -1279,7 +1288,10 @@
           <img class="char-portrait"
                src="https://images.evetech.net/characters/${m.character_id}/portrait?size=128" alt="">
           <div class="char-info">
-            <div class="name">${escHtml(p?.character_name || 'Unknown')}</div>
+            <div class="name" style="display:flex;align-items:center;gap:0.4rem">
+              ${escHtml(p?.character_name || 'Unknown')}
+              ${characterZkillLink(m.character_id)}
+            </div>
             <div class="corp" id="corp-name-display">Corp ID: ${p?.corporation_id ?? '–'}</div>
             <div class="sec-status" style="color:${secStatColor}">
               Security Status: ${p ? secSign + p.security_status.toFixed(1) : '–'}
@@ -1367,9 +1379,6 @@
            <div class="label">Total Skillpoints</div>
            <div class="val">${fmtSP(skills?.total_sp || 0)}<span class="unit">SP</span></div>
          </div>`;
-    const trainingBadge = skillsErr ? '' : (skills?.training_active
-      ? '<span class="badge badge-green">Training</span>'
-      : '<span class="badge badge-muted">Idle</span>');
 
     return `
       <div class="card">
@@ -1377,10 +1386,6 @@
         <div class="metrics">
           ${walletCell}
           ${skillsCell}
-        </div>
-        <div style="margin-top:0.75rem;font-size:0.75rem;color:#64748b;
-                    text-transform:uppercase;letter-spacing:0.06em">
-          Skill Queue &nbsp; ${trainingBadge}
         </div>
         <div style="margin-top:0.75rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;
                     font-size:0.7rem;color:#64748b">
