@@ -331,6 +331,17 @@ async def get_system_info(system_id: int) -> dict:
             return {"name": f"System #{system_id}", "security_status": None}
 
 
+async def get_server_status() -> dict | None:
+    """EVE Tranquility server status. Public ESI, no auth. Returns None on failure."""
+    async with httpx.AsyncClient(timeout=4.0) as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/status/")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError:
+            return None
+
+
 async def resolve_type_ids(names: list[str]) -> dict[str, int]:
     """Bulk-resolve EVE item names to type_ids via /universe/ids/."""
     clean = list({n for n in names if n})

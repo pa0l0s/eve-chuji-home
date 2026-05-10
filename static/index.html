@@ -53,6 +53,36 @@
 
     .nav-right { display: flex; align-items: center; gap: 0.75rem; }
 
+    .tq-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      padding: 0.25rem 0.55rem;
+      background: #252a3d;
+      border-radius: 6px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .tq-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #475569;
+      flex-shrink: 0;
+    }
+    .tq-dot.tq-online {
+      background: #4ade80;
+      box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+    }
+    .tq-dot.tq-offline { background: #f87171; }
+    .tq-dot.tq-vip {
+      background: #fb923c;
+      box-shadow: 0 0 6px rgba(251, 146, 60, 0.6);
+    }
+    .tq-count { color: #38bdf8; font-variant-numeric: tabular-nums; }
+
     .nav-char { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #94a3b8; }
 
     .nav-portrait {
@@ -467,6 +497,9 @@
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
     </div>
     <div class="nav-right">
+      <div class="tq-status" id="tq-status" title="EVE Tranquility status">
+        <span class="tq-dot"></span><span>TQ</span>
+      </div>
       <div class="nav-char">
         <img id="nav-portrait" class="nav-portrait" src="" alt="">
         <span id="nav-name"></span>
@@ -554,7 +587,36 @@
       document.getElementById('nav-name').textContent = currentUser.character_name;
       show('view-app');
       showView('contracts');
+      pollServerStatus();
     } catch { show('view-login'); }
+  }
+
+  async function pollServerStatus() {
+    try {
+      const r = await fetch('/api/status');
+      renderServerStatus(r.ok ? await r.json() : null);
+    } catch { renderServerStatus(null); }
+    setTimeout(pollServerStatus, 60000);
+  }
+
+  function renderServerStatus(s) {
+    const el = document.getElementById('tq-status');
+    if (!el) return;
+    if (!s || !s.online) {
+      el.innerHTML = '<span class="tq-dot tq-offline"></span><span>TQ down</span>';
+      el.title = 'EVE Tranquility unreachable';
+      return;
+    }
+    if (s.vip) {
+      el.innerHTML = '<span class="tq-dot tq-vip"></span><span>TQ VIP</span>';
+      el.title = 'VIP mode — limited access';
+      return;
+    }
+    const count = s.players != null ? fmtNum(s.players) : '?';
+    el.innerHTML = `<span class="tq-dot tq-online"></span>
+                    <span>TQ</span>
+                    <span class="tq-count">${count}</span>`;
+    el.title = `Tranquility online · ${count} pilots · ${s.version || ''}`;
   }
 
   // ── View switching ────────────────────────────────────────────────────────

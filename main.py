@@ -19,7 +19,7 @@ from esi import (
     get_corp_contracts, get_corp_projects,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
-    get_type_info, get_system_info,
+    get_type_info, get_system_info, get_server_status,
     resolve_names, resolve_type_ids, get_jita_buy_max,
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
 )
@@ -50,6 +50,21 @@ async def get_current_character_id(session: str | None = Cookie(None)) -> int:
 
 
 # ── Auth routes ──────────────────────────────────────────────────────────────
+
+@app.get("/api/status")
+async def server_status():
+    """Public EVE Tranquility status. No auth required."""
+    s = await get_server_status()
+    if not s:
+        return {"online": False, "players": None, "vip": False}
+    return {
+        "online": True,
+        "players": s.get("players"),
+        "vip": bool(s.get("vip", False)),
+        "version": s.get("server_version"),
+        "start_time": s.get("start_time"),
+    }
+
 
 @app.get("/api/auth/login")
 async def login():
