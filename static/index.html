@@ -966,10 +966,16 @@
   }
 
   function renderProjects(data) {
-    const { active = [], closed = [] } = data;
+    const { active = [], closed = [], market_error } = data;
     document.getElementById('count-active').textContent = active.length;
     document.getElementById('count-closed').textContent = closed.length;
-    document.getElementById('pane-active').innerHTML = projectListHtml(active, 'No active projects.');
+    const marketNotice = market_error
+      ? `<div class="card-error" style="margin-bottom:1rem">
+           Market price comparison unavailable: ${escHtml(market_error)}
+         </div>`
+      : '';
+    document.getElementById('pane-active').innerHTML =
+      marketNotice + projectListHtml(active, 'No active projects.');
     document.getElementById('pane-closed').innerHTML = projectListHtml(closed, 'No closed projects.');
   }
 

@@ -204,34 +204,44 @@ async def projects(session: str | None = Cookie(None)):
     active = [p for p in raw if p.get("state") == "Active"]
     closed = [p for p in raw if p.get("state") in ("Completed", "Closed", "Expired")]
 
-    # Resolve project names → type_ids, then fetch Jita 4-4 highest buy per type.
-    names = list({p["name"] for p in active if p.get("name")})
-    name_to_type = await resolve_type_ids(names)
-    needed_ids = list(set(name_to_type.values()))
+    # Market enrichment is best-effort: a failure here must not break the project list.
+    market_error = None
+    name_to_type, err = await _safe(resolve_type_ids(
+        [p["name"] for p in active if p.get("name")]
+    ))
+    if err or name_to_type is None:
+        market_error = f"Type resolution failed: {err or 'no data'}"
+        name_to_type = {}
+
     buy_maxes: dict[int, float | None] = {}
+    needed_ids = list(set(name_to_type.values()))
     if needed_ids:
-        buy_max_list = await asyncio.gather(*[get_jita_buy_max(t) for t in needed_ids])
-        buy_maxes = dict(zip(needed_ids, buy_max_list))
+        # Each Jita lookup wrapped — one failure leaves the others' prices intact.
+        results = await asyncio.gather(*[_safe(get_jita_buy_max(t)) for t in needed_ids])
+        buy_maxes = {tid: r for tid, (r, _) in zip(needed_ids, results)}
 
     for p in active:
-        tid = name_to_type.get(p.get("name"))
-        buy_max = buy_maxes.get(tid) if tid else None
-        desired = (p.get("progress") or {}).get("desired") or 0
-        reward = p.get("reward") or {}
-        initial = reward.get("initial")
-        if not (tid and buy_max and desired and initial):
-            continue
-        project_price = initial / desired
-        target_price  = buy_max * MARKET_TARGET_RATIO
-        diff_ratio    = abs(project_price - target_price) / target_price
-        p["market"] = {
-            "type_id": tid,
-            "jita_buy_max": buy_max,
-            "target_price": target_price,
-            "project_price": project_price,
-            "diff_ratio": diff_ratio,
-            "needs_update": diff_ratio > PRICE_DIFF_THRESHOLD,
-        }
+        try:
+            tid = name_to_type.get(p.get("name"))
+            buy_max = buy_maxes.get(tid) if tid else None
+            desired = (p.get("progress") or {}).get("desired") or 0
+            reward = p.get("reward") or {}
+            initial = reward.get("initial")
+            if not (tid and buy_max and desired and initial):
+                continue
+            project_price = initial / desired
+            target_price  = buy_max * MARKET_TARGET_RATIO
+            diff_ratio    = abs(project_price - target_price) / target_price
+            p["market"] = {
+                "type_id": tid,
+                "jita_buy_max": buy_max,
+                "target_price": target_price,
+                "project_price": project_price,
+                "diff_ratio": diff_ratio,
+                "needs_update": diff_ratio > PRICE_DIFF_THRESHOLD,
+            }
+        except Exception as e:
+            print(f"Market enrichment failed for project {p.get('name')!r}: {e}")
 
     return {
         "active": active,
@@ -240,6 +250,7 @@ async def projects(session: str | None = Cookie(None)):
             "target_ratio": MARKET_TARGET_RATIO,
             "diff_threshold": PRICE_DIFF_THRESHOLD,
         },
+        "market_error": market_error,
     }
 
 
