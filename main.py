@@ -16,7 +16,8 @@ from esi import (
     get_character_location, get_character_online, get_character_ship,
     get_corp_contracts, get_corp_projects,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
-    get_location_name, get_structure_info, get_type_info, get_system_info,
+    get_location_name, get_location_info, get_structure_info,
+    get_type_info, get_system_info,
     resolve_names,
 )
 from db import cache_structure_name
@@ -147,34 +148,32 @@ async def contracts(session: str | None = Cookie(None)):
     loc_ids.discard(None)
     char_ids = [c.get(k) for c in active for k in ("issuer_id", "acceptor_id") if c.get(k)]
 
-    structure_ids = [lid for lid in loc_ids if lid >= 1_000_000_000_000]
-    station_ids   = [lid for lid in loc_ids if lid <  1_000_000_000_000]
-
-    structures_info, station_names_list, char_names = await asyncio.gather(
-        asyncio.gather(*[get_structure_info(sid, access_token) for sid in structure_ids]),
-        asyncio.gather(*[get_location_name(sid, access_token) for sid in station_ids]),
+    loc_info_list, char_names = await asyncio.gather(
+        asyncio.gather(*[get_location_info(lid, access_token) for lid in loc_ids]),
         resolve_names(char_ids),
     )
-    loc_names: dict[int, str] = {}
-    loc_types: dict[int, int | None] = {}
-    for sid, info in zip(structure_ids, structures_info):
-        loc_names[sid] = info["name"]
-        loc_types[sid] = info.get("type_id")
-    for sid, name in zip(station_ids, station_names_list):
-        loc_names[sid] = name
+    loc_data = dict(zip(loc_ids, loc_info_list))
 
-    needed_type_ids = {tid for tid in loc_types.values() if tid}
-    type_names: dict[int, str] = {}
-    if needed_type_ids:
-        type_infos = await asyncio.gather(*[get_type_info(t) for t in needed_type_ids])
-        type_names = {tid: info["name"] for tid, info in zip(needed_type_ids, type_infos)}
+    type_ids   = {info.get("type_id")   for info in loc_data.values() if info.get("type_id")}
+    system_ids = {info.get("system_id") for info in loc_data.values() if info.get("system_id")}
+    type_infos, system_infos = await asyncio.gather(
+        asyncio.gather(*[get_type_info(t) for t in type_ids]),
+        asyncio.gather(*[get_system_info(s) for s in system_ids]),
+    )
+    type_names    = {tid: info["name"] for tid, info in zip(type_ids, type_infos)}
+    system_names  = {sid: info["name"] for sid, info in zip(system_ids, system_infos)}
+
+    def _enrich(c, key):
+        sid = c.get(f"{key}_location_id")
+        info = loc_data.get(sid) or {}
+        c[f"{key}_name"]        = info.get("name") or str(sid or "")
+        c[f"{key}_type"]        = type_names.get(info.get("type_id"))
+        c[f"{key}_system_id"]   = info.get("system_id")
+        c[f"{key}_system_name"] = system_names.get(info.get("system_id"))
 
     for c in hauling:
-        sid_a, sid_b = c.get("start_location_id"), c.get("end_location_id")
-        c["start_name"] = loc_names.get(sid_a, str(sid_a or ""))
-        c["end_name"]   = loc_names.get(sid_b, str(sid_b or ""))
-        c["start_type"] = type_names.get(loc_types.get(sid_a))
-        c["end_type"]   = type_names.get(loc_types.get(sid_b))
+        _enrich(c, "start")
+        _enrich(c, "end")
     for c in active:
         if c.get("issuer_id"):
             c["issuer_name"] = char_names.get(c["issuer_id"])

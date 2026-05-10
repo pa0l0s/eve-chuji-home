@@ -356,6 +356,28 @@
 
     .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
 
+    /* ── System links ── */
+    .sys-link {
+      display: inline-flex;
+      gap: 0.2rem;
+      margin-left: 0.35rem;
+      vertical-align: middle;
+    }
+
+    .sys-link a {
+      background: #252a3d;
+      color: #64748b;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 0.05rem 0.3rem;
+      border-radius: 3px;
+      text-decoration: none;
+      letter-spacing: 0.05em;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .sys-link a:hover { background: #38bdf8; color: #0f1117; }
+
     /* ── Hidden ── */
     .hidden { display: none !important; }
   </style>
@@ -561,9 +583,9 @@
             ${hauling.map(c => `
               <tr>
                 <td style="color:#e2e8f0">
-                  ${locWithType(c.start_name, c.start_type)}
+                  ${locWithType(c.start_name, c.start_type, c.start_system_name, c.start_system_id)}
                   <span style="color:#475569"> → </span>
-                  ${locWithType(c.end_name, c.end_type)}
+                  ${locWithType(c.end_name, c.end_type, c.end_system_name, c.end_system_id)}
                   ${issuerLine(c)}
                 </td>
                 <td>${fmtNum(Math.round(c.volume || 0))} m³</td>
@@ -654,11 +676,19 @@
     return parts.length > 2 ? parts.slice(0, 2).join(' - ') : name;
   }
 
-  function locWithType(name, type) {
+  function locWithType(name, type, sysName, sysId) {
     const typeBadge = type
       ? ` <span class="badge badge-muted" style="margin-left:0.25rem">${escHtml(type)}</span>`
       : '';
-    return escHtml(shortLoc(name)) + typeBadge;
+    return escHtml(shortLoc(name)) + typeBadge + systemLinks(sysName, sysId);
+  }
+
+  function systemLinks(name, id) {
+    if (!id || !name) return '';
+    return `<span class="sys-link">
+      <a href="https://zkillboard.com/system/${id}/" target="_blank" rel="noopener" title="zKillboard">zK</a>
+      <a href="https://evemaps.dotlan.net/system/${encodeURIComponent(name)}" target="_blank" rel="noopener" title="Dotlan">DT</a>
+    </span>`;
   }
 
   // ── Structures ────────────────────────────────────────────────────────────
@@ -742,7 +772,7 @@
 
   function systemCell(s) {
     const sec = (typeof s.security_status === 'number') ? ` <span style="color:${secColor(s.security_status)}">${s.security_status.toFixed(1)}</span>` : '';
-    return `${escHtml(s.system_name || 'System #' + (s.system_id || ''))}${sec}`;
+    return `${escHtml(s.system_name || 'System #' + (s.system_id || ''))}${sec}${systemLinks(s.system_name, s.system_id)}`;
   }
 
   function secColor(v) {
@@ -995,7 +1025,7 @@
           <div class="metric">
             <div class="label">Solar System</div>
             <div style="font-size:0.95rem;color:#e2e8f0;font-weight:600">
-              ${escHtml(m.location?.system_name || '–')}${sysSecText}
+              ${escHtml(m.location?.system_name || '–')}${sysSecText}${systemLinks(m.location?.system_name, m.location?.system_id)}
             </div>
           </div>
           ${dockedRow}

@@ -219,16 +219,32 @@ async def get_structure_info(structure_id: int, access_token: str) -> dict:
     return {"name": f"Citadel #{str(structure_id)[-5:]}", "type_id": None, "system_id": None}
 
 
-async def get_location_name(location_id: int, access_token: str) -> str:
+async def get_station_info(station_id: int) -> dict:
+    """NPC station info: name, type_id, system_id. Public ESI."""
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/universe/stations/{station_id}/")
+            r.raise_for_status()
+            data = r.json()
+            return {
+                "name": data.get("name", f"Station #{station_id}"),
+                "type_id": data.get("type_id"),
+                "system_id": data.get("system_id"),
+            }
+        except httpx.HTTPError:
+            return {"name": f"Station #{str(station_id)[-5:]}",
+                    "type_id": None, "system_id": None}
+
+
+async def get_location_info(location_id: int, access_token: str) -> dict:
+    """Returns {name, type_id, system_id} for any station or structure."""
     if location_id < 1_000_000_000_000:
-        async with httpx.AsyncClient() as client:
-            try:
-                r = await client.get(f"{ESI_BASE}/universe/stations/{location_id}/")
-                r.raise_for_status()
-                return r.json().get("name", "Unknown station")
-            except httpx.HTTPError:
-                return f"Station #{str(location_id)[-5:]}"
-    info = await get_structure_info(location_id, access_token)
+        return await get_station_info(location_id)
+    return await get_structure_info(location_id, access_token)
+
+
+async def get_location_name(location_id: int, access_token: str) -> str:
+    info = await get_location_info(location_id, access_token)
     return info["name"]
 
 
