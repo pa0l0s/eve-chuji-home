@@ -179,14 +179,14 @@
     }
 
     .metric .val {
-      font-size: 1.75rem;
+      font-size: 1.4rem;
       font-weight: 700;
       color: #38bdf8;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
-    .metric .val.val-sm { font-size: 1.35rem; }
-    .metric .val.val-xs { font-size: 1.05rem; }
+    .metric .val.val-sm { font-size: 1.15rem; }
+    .metric .val.val-xs { font-size: 0.95rem; }
     .metric .unit { font-size: 0.7rem; color: #475569; margin-left: 0.25rem; }
 
     /* ── Progress ── */
@@ -1950,9 +1950,9 @@
     const skills = sectionData(m.skills);
     const online = sectionData(m.online);
 
-    const walletStr = fmtISK(wallet || 0);
-    // Very long abbreviations (8+ chars) get a smaller font so they fit.
-    const valSizeCls = walletStr.length >= 8 ? ' val-sm' : '';
+    const walletStr = fmtISKLong(wallet || 0);
+    // Very long strings (12+ chars like "100,000.0 M") shrink to fit the card.
+    const valSizeCls = walletStr.length >= 12 ? ' val-sm' : '';
     const walletCell = walletErr
       ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
       : `<div class="metric">
@@ -2264,6 +2264,15 @@
     if (n >= 1e12) return (n / 1e12).toFixed(2) + 'T';
     if (n >= 1e9)  return (n / 1e9).toFixed(2) + 'B';
     if (n >= 1e6)  return (n / 1e6).toFixed(2) + 'M';
+    return new Intl.NumberFormat().format(Math.round(n));
+  }
+
+  // Longer form for places where extra digits are preferred (e.g. wallet).
+  // Keeps M as the unit up to 1T so 2.28B reads as "2,280.0 M".
+  function fmtISKLong(n) {
+    if (n >= 1e12) return (n / 1e12).toLocaleString(undefined, {minimumFractionDigits: 3, maximumFractionDigits: 3}) + ' T';
+    if (n >= 1e6)  return (n / 1e6 ).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' M';
+    if (n >= 1e3)  return (n / 1e3 ).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' K';
     return new Intl.NumberFormat().format(Math.round(n));
   }
 
