@@ -195,6 +195,27 @@ async def cache_structure_name(structure_id: int, name: str,
         await db.commit()
 
 
+_CACHE_TABLES = ("structure_cache", "type_cache", "system_cache", "janice_cache")
+
+
+async def cache_counts() -> dict[str, int]:
+    async with aiosqlite.connect(_db_path()) as db:
+        result = {}
+        for table in _CACHE_TABLES:
+            async with db.execute(f"SELECT COUNT(*) FROM {table}") as cur:
+                row = await cur.fetchone()
+                result[table] = row[0] if row else 0
+        return result
+
+
+async def clear_cache_table(table: str):
+    if table not in _CACHE_TABLES:
+        raise ValueError(f"Unknown cache table: {table}")
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(f"DELETE FROM {table}")
+        await db.commit()
+
+
 async def list_structures_by_owner(owner_id: int) -> list[dict]:
     async with aiosqlite.connect(_db_path()) as db:
         db.row_factory = aiosqlite.Row

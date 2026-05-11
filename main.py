@@ -183,6 +183,45 @@ async def admin_unban(character_id: int, _admin: int = Depends(require_admin)):
     return {"ok": True}
 
 
+# Friendly cache names → DB table or sentinel.
+_CACHE_MAP = {
+    "structures": "structure_cache",
+    "types":      "type_cache",
+    "systems":    "system_cache",
+    "janice":     "janice_cache",
+}
+
+
+@app.get("/api/admin/cache")
+async def admin_cache_status(_admin: int = Depends(require_admin)):
+    db_counts = await database.cache_counts()
+    return {
+        "caches": [
+            {"name": "structures", "rows": db_counts["structure_cache"], "kind": "db"},
+            {"name": "types",      "rows": db_counts["type_cache"],      "kind": "db"},
+            {"name": "systems",    "rows": db_counts["system_cache"],    "kind": "db"},
+            {"name": "janice",     "rows": db_counts["janice_cache"],    "kind": "db"},
+            {"name": "contracts",  "rows": len(_contracts_cache),        "kind": "memory"},
+        ],
+    }
+
+
+@app.post("/api/admin/cache/{name}/purge")
+async def admin_cache_purge(name: str, _admin: int = Depends(require_admin)):
+    if name == "all":
+        for table in _CACHE_MAP.values():
+            await database.clear_cache_table(table)
+        _contracts_cache.clear()
+        return {"ok": True, "cleared": "all"}
+    if name == "contracts":
+        _contracts_cache.clear()
+        return {"ok": True, "cleared": "contracts"}
+    if name not in _CACHE_MAP:
+        raise HTTPException(status_code=400, detail="Unknown cache")
+    await database.clear_cache_table(_CACHE_MAP[name])
+    return {"ok": True, "cleared": name}
+
+
 @app.get("/api/auth/logout")
 async def logout():
     resp = RedirectResponse(url="/")

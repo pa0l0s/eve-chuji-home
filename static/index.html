@@ -733,7 +733,8 @@
     <!-- Admin view -->
     <div id="view-admin" class="hidden">
       <div id="admin-error" class="banner"></div>
-      <div class="page-title">User Administration</div>
+      <div class="page-title">Administration</div>
+      <div id="admin-caches" class="contract-pane" style="margin-bottom:1.5rem"></div>
       <div id="admin-content" class="contract-pane"></div>
     </div>
 
@@ -1611,17 +1612,78 @@
   // ── Admin ─────────────────────────────────────────────────────────────────
 
   async function loadAdmin() {
+    hideError('admin-error');
+    await Promise.all([loadAdminUsers(), loadAdminCaches()]);
+  }
+
+  async function loadAdminUsers() {
     try {
       const r = await fetch('/api/admin/users');
       if (!r.ok) {
         showError('admin-error',
-          r.status === 403 ? 'Admin access required.' : `Failed to load (${r.status})`);
+          r.status === 403 ? 'Admin access required.' : `Failed to load users (${r.status})`);
         return;
       }
-      hideError('admin-error');
       renderAdmin(await r.json());
     } catch {
       showError('admin-error', 'Network error — could not load users.');
+    }
+  }
+
+  async function loadAdminCaches() {
+    try {
+      const r = await fetch('/api/admin/cache');
+      if (!r.ok) return;
+      renderAdminCaches(await r.json());
+    } catch {}
+  }
+
+  function renderAdminCaches(data) {
+    const list = data.caches || [];
+    const totalRows = list.reduce((s, c) => s + (c.rows || 0), 0);
+    const rows = list.map(c => `
+      <tr>
+        <td style="color:#e2e8f0;font-weight:600">${escHtml(c.name)}</td>
+        <td style="color:#64748b;font-size:0.75rem">${c.kind === 'memory' ? 'in-memory' : 'database'}</td>
+        <td style="color:#38bdf8;font-variant-numeric:tabular-nums">${fmtNum(c.rows)}</td>
+        <td>
+          <button class="btn-logout" onclick="adminPurgeCache('${c.name}')"
+                  ${c.rows ? '' : 'disabled style="opacity:0.4;cursor:not-allowed"'}>
+            Purge
+          </button>
+        </td>
+      </tr>`).join('');
+    document.getElementById('admin-caches').innerHTML = `
+      <div class="card full">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+          <div class="card-title" style="margin:0">Caches
+            <span class="badge badge-muted" style="margin-left:0.4rem">${fmtNum(totalRows)} entries</span>
+          </div>
+          <button class="btn-logout" onclick="adminPurgeCache('all')"
+                  style="border-color:#ef4444;color:#fca5a5">
+            Purge All
+          </button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Cache</th><th>Kind</th><th>Entries</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function adminPurgeCache(name) {
+    if (!confirm(`Purge ${name === 'all' ? 'ALL caches' : 'the ' + name + ' cache'}?`)) return;
+    try {
+      const r = await fetch(`/api/admin/cache/${encodeURIComponent(name)}/purge`, { method: 'POST' });
+      if (!r.ok) {
+        showError('admin-error', `Purge failed (${r.status})`);
+        return;
+      }
+      loadAdminCaches();
+    } catch {
+      showError('admin-error', 'Network error during purge.');
     }
   }
 
