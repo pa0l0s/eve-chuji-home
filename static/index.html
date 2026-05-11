@@ -225,6 +225,21 @@
       border-bottom: 1px solid #2d3348;
     }
 
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s;
+    }
+    th.sortable:hover { color: #94a3b8; }
+    th.sortable .sort-arrow {
+      display: inline-block;
+      margin-left: 0.2rem;
+      color: #475569;
+      font-size: 0.65rem;
+    }
+    th.sort-active { color: #38bdf8; }
+    th.sort-active .sort-arrow { color: #38bdf8; }
+
     td { padding: 0.6rem 0.6rem; border-bottom: 1px solid #1a1e2e; color: #94a3b8; }
     tr:last-child td { border-bottom: none; }
 
@@ -596,6 +611,13 @@
 <script>
   let currentUser = null;
   let contractsTimer = null;
+  let contractsData = null;
+  const sortState = {
+    hauling: { col: null, dir: 'desc' },
+    abyssal: { col: null, dir: 'desc' },
+    others:  { col: null, dir: 'desc' },
+  };
+  const numericSortCols = new Set(['volume', 'reward', 'collateral', 'price', 'buyout', 'expires']);
 
   // ── Boot ──────────────────────────────────────────────────────────────────
 
@@ -702,8 +724,60 @@
     return '<span class="badge badge-blue">Outstanding</span>';
   }
 
+  function contractSortVal(c, col) {
+    switch (col) {
+      case 'route':      return ((c.start_name || '') + ' → ' + (c.end_name || '')).toLowerCase();
+      case 'volume':     return c.volume     || 0;
+      case 'reward':     return c.reward     || 0;
+      case 'collateral': return c.collateral || 0;
+      case 'price':      return c.price      || 0;
+      case 'buyout':     return c.buyout     || 0;
+      case 'hauler':     return (c.acceptor_name || '').toLowerCase();
+      case 'title':      return (c.title || '').toLowerCase();
+      case 'type':       return (c.type || '').toLowerCase();
+      case 'status':     return (c.status || '').toLowerCase();
+      case 'expires':    return c.date_expired ? new Date(c.date_expired).getTime() : 0;
+      default:           return 0;
+    }
+  }
+
+  function sortContracts(list, table) {
+    const { col, dir } = sortState[table];
+    if (!col) return list;
+    const sorted = [...list].sort((a, b) => {
+      const va = contractSortVal(a, col);
+      const vb = contractSortVal(b, col);
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return 0;
+    });
+    return dir === 'desc' ? sorted.reverse() : sorted;
+  }
+
+  function setContractSort(table, col) {
+    const s = sortState[table];
+    if (s.col === col) {
+      s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      s.col = col;
+      s.dir = numericSortCols.has(col) ? 'desc' : 'asc';
+    }
+    if (contractsData) renderContracts(contractsData);
+  }
+
+  function sortableTh(table, col, label) {
+    const s = sortState[table];
+    const active = s.col === col;
+    const arrow = active ? (s.dir === 'asc' ? '▲' : '▼') : '↕';
+    const cls = 'sortable' + (active ? ' sort-active' : '');
+    return `<th class="${cls}" onclick="setContractSort('${table}','${col}')">${label}<span class="sort-arrow">${arrow}</span></th>`;
+  }
+
   function renderContracts(data) {
-    const { hauling = [], abyssal = [], others = [] } = data;
+    contractsData = data;
+    const hauling = sortContracts(data.hauling || [], 'hauling');
+    const abyssal = sortContracts(data.abyssal || [], 'abyssal');
+    const others  = sortContracts(data.others  || [], 'others');
 
     document.getElementById('count-hauling').textContent = hauling.length;
     document.getElementById('count-abyssal').textContent = abyssal.length;
@@ -714,7 +788,14 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Route</th><th>Volume</th><th>Reward</th><th>Collateral</th><th>Hauler</th><th>Status</th><th>Expires</th><th></th>
+            ${sortableTh('hauling','route','Route')}
+            ${sortableTh('hauling','volume','Volume')}
+            ${sortableTh('hauling','reward','Reward')}
+            ${sortableTh('hauling','collateral','Collateral')}
+            ${sortableTh('hauling','hauler','Hauler')}
+            ${sortableTh('hauling','status','Status')}
+            ${sortableTh('hauling','expires','Expires')}
+            <th></th>
           </tr></thead>
           <tbody>
             ${hauling.map(c => `
@@ -742,7 +823,12 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Title</th><th>Starting Bid</th><th>Buyout</th><th>Status</th><th>Ends</th><th></th>
+            ${sortableTh('abyssal','title','Title')}
+            ${sortableTh('abyssal','price','Starting Bid')}
+            ${sortableTh('abyssal','buyout','Buyout')}
+            ${sortableTh('abyssal','status','Status')}
+            ${sortableTh('abyssal','expires','Ends')}
+            <th></th>
           </tr></thead>
           <tbody>
             ${abyssal.map(c => `
@@ -769,7 +855,13 @@
       <div class="card full">
         <table>
           <thead><tr>
-            <th>Title</th><th>Type</th><th>Price</th><th>Accepted by</th><th>Status</th><th>Expires</th><th></th>
+            ${sortableTh('others','title','Title')}
+            ${sortableTh('others','type','Type')}
+            ${sortableTh('others','price','Price')}
+            ${sortableTh('others','hauler','Accepted by')}
+            ${sortableTh('others','status','Status')}
+            ${sortableTh('others','expires','Expires')}
+            <th></th>
           </tr></thead>
           <tbody>
             ${others.map(c => `
