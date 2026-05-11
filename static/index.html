@@ -793,9 +793,10 @@
   function renderNavWallet(balance) {
     const el = document.getElementById('nav-wallet');
     if (!el || balance == null) return;
+    const w = walletDisplay(balance);
     el.classList.remove('hidden');
-    el.querySelector('.nw-val').textContent = fmtISKLong(balance);
-    el.title = `Wallet: ${new Intl.NumberFormat().format(Math.round(balance))} ISK`;
+    el.querySelector('.nw-val').textContent = w.value;
+    el.title = w.tooltip;
   }
 
   async function pollServerStatus() {
@@ -1950,15 +1951,13 @@
     const skills = sectionData(m.skills);
     const online = sectionData(m.online);
 
-    const walletStr = fmtISKLong(wallet || 0);
-    // Very long strings (12+ chars like "100,000.0 M") shrink to fit the card.
-    const valSizeCls = walletStr.length >= 12 ? ' val-sm' : '';
+    const w = walletDisplay(wallet);
     const walletCell = walletErr
       ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
       : `<div class="metric">
            <div class="label">Wallet Balance</div>
-           <div class="val${valSizeCls}" title="${new Intl.NumberFormat().format(Math.round(wallet || 0))} ISK">
-             ${walletStr}<span class="unit">ISK</span>
+           <div class="val ${w.sizeCls}" title="${w.tooltip}">
+             ${w.value}<span class="unit">ISK</span>
            </div>
          </div>`;
     const skillsCell = skillsErr
@@ -2274,6 +2273,22 @@
     if (n >= 1e6)  return (n / 1e6 ).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' M';
     if (n >= 1e3)  return (n / 1e3 ).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' K';
     return new Intl.NumberFormat().format(Math.round(n));
+  }
+
+  // Exact ISK amount for tooltips, e.g. "2,280,000,000 ISK".
+  function fmtISKFull(n) {
+    return new Intl.NumberFormat().format(Math.round(n || 0)) + ' ISK';
+  }
+
+  // Single source of truth for wallet display across the app.
+  // Returns {value, tooltip, sizeCls} that callers can drop into their template.
+  function walletDisplay(balance) {
+    const value = fmtISKLong(balance || 0);
+    return {
+      value,
+      tooltip: 'Wallet: ' + fmtISKFull(balance),
+      sizeCls: value.length >= 12 ? 'val-sm' : '',
+    };
   }
 
   function fmtSP(n) {
