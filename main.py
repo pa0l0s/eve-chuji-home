@@ -17,7 +17,7 @@ from esi import (
     get_character_attributes, get_character_skillqueue,
     get_character_location, get_character_online, get_character_ship,
     get_character_contracts,
-    get_corp_contracts, get_corp_projects,
+    get_corp_contracts, get_corp_projects, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_system_info, get_server_status,
@@ -286,6 +286,22 @@ async def projects(session: str | None = Cookie(None)):
         },
         "market_error": market_error,
     }
+
+
+@app.get("/api/projects/{project_id}/contributors")
+async def project_contributors(project_id: str, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        contributors = await get_corp_project_contributors(CORP_ID, project_id, access_token)
+    except httpx.HTTPStatusError as e:
+        print(f"ESI project contributors HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Insufficient corporation roles")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"project_id": project_id, "contributors": contributors}
 
 
 @app.get("/api/structures")

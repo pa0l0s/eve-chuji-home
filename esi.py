@@ -351,6 +351,33 @@ async def get_system_info(system_id: int) -> dict:
             return {"name": f"System #{system_id}", "security_status": None}
 
 
+async def get_corp_project_contributors(corporation_id: int, project_id: str,
+                                        access_token: str) -> list:
+    """List of {id, name, contributed} for a project. New ESI; root URL + compat header."""
+    result = []
+    cursor = None
+    async with httpx.AsyncClient() as client:
+        while True:
+            params = {"limit": 100}
+            if cursor:
+                params["after"] = cursor
+            r = await client.get(
+                f"https://esi.evetech.net/corporations/{corporation_id}/projects/{project_id}/contributors",
+                params=params,
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "X-Compatibility-Date": "2026-01-01",
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            result.extend(data.get("contributors", []))
+            cursor = data.get("cursor", {}).get("after")
+            if not cursor:
+                break
+    return result
+
+
 async def open_contract_in_client(contract_id: int, access_token: str) -> None:
     """Open the contract window in the EVE client of the authenticated character."""
     async with httpx.AsyncClient() as client:
