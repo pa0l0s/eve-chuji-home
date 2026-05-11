@@ -252,6 +252,7 @@ async def _fetch_structure(structure_id: int, access_token: str) -> dict | None:
                 "name": data.get("name"),
                 "type_id": data.get("type_id"),
                 "system_id": data.get("solar_system_id"),
+                "owner_id": data.get("owner_id"),
             }
         except httpx.HTTPError:
             return None
@@ -278,7 +279,8 @@ async def get_structure_info(structure_id: int, access_token: str) -> dict:
 
     if info and info.get("name"):
         await cache_structure_name(
-            structure_id, info["name"], info.get("type_id"), info.get("system_id")
+            structure_id, info["name"],
+            info.get("type_id"), info.get("system_id"), info.get("owner_id"),
         )
         return info
     if cached and cached.get("name"):

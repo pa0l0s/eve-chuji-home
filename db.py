@@ -43,7 +43,7 @@ async def init_db():
                 cached_at    REAL    NOT NULL
             )
         """)
-        for col in ("type_id INTEGER", "system_id INTEGER"):
+        for col in ("type_id INTEGER", "system_id INTEGER", "owner_id INTEGER"):
             try:
                 await db.execute(f"ALTER TABLE structure_cache ADD COLUMN {col}")
             except aiosqlite.OperationalError:
@@ -170,7 +170,7 @@ async def get_cached_structure(structure_id: int) -> dict | None:
     async with aiosqlite.connect(_db_path()) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT name, type_id, system_id FROM structure_cache WHERE structure_id = ?",
+            "SELECT name, type_id, system_id, owner_id FROM structure_cache WHERE structure_id = ?",
             (structure_id,),
         ) as cur:
             row = await cur.fetchone()
@@ -179,18 +179,31 @@ async def get_cached_structure(structure_id: int) -> dict | None:
 
 async def cache_structure_name(structure_id: int, name: str,
                                type_id: int | None = None,
-                               system_id: int | None = None):
+                               system_id: int | None = None,
+                               owner_id: int | None = None):
     async with aiosqlite.connect(_db_path()) as db:
         await db.execute("""
-            INSERT INTO structure_cache (structure_id, name, type_id, system_id, cached_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO structure_cache (structure_id, name, type_id, system_id, owner_id, cached_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(structure_id) DO UPDATE SET
                 name      = excluded.name,
                 type_id   = COALESCE(excluded.type_id,   structure_cache.type_id),
                 system_id = COALESCE(excluded.system_id, structure_cache.system_id),
+                owner_id  = COALESCE(excluded.owner_id,  structure_cache.owner_id),
                 cached_at = excluded.cached_at
-        """, (structure_id, name, type_id, system_id, time.time()))
+        """, (structure_id, name, type_id, system_id, owner_id, time.time()))
         await db.commit()
+
+
+async def list_structures_by_owner(owner_id: int) -> list[dict]:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT structure_id, name, type_id, system_id "
+            "FROM structure_cache WHERE owner_id = ? ORDER BY name",
+            (owner_id,),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_cached_type(type_id: int) -> dict | None:

@@ -367,23 +367,36 @@ async def structures(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        citadels, starbases = await asyncio.gather(
-            get_corp_structures(CORP_ID, access_token),
-            get_corp_starbases(CORP_ID, access_token),
-        )
-    except httpx.HTTPStatusError as e:
-        print(f"ESI structures HTTP {e.response.status_code}: {e.response.text}")
-        if e.response.status_code == 403:
-            raise HTTPException(status_code=403, detail="Insufficient corporation roles")
-        raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError as e:
-        print(f"ESI structures connection error: {e}")
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Token refresh failed: {e}")
 
-    type_ids   = {s.get("type_id") for s in citadels} | {s.get("type_id") for s in starbases}
-    system_ids = {s.get("system_id") for s in citadels} | {s.get("system_id") for s in starbases}
-    type_ids.discard(None)
-    system_ids.discard(None)
+    # Try director-only endpoints; fall back to cached + universe data on 403.
+    (citadels_full, citadels_err), (starbases, starbases_err) = await asyncio.gather(
+        _safe(get_corp_structures(CORP_ID, access_token)),
+        _safe(get_corp_starbases(CORP_ID, access_token)),
+    )
+
+    limited_mode = citadels_full is None
+    if limited_mode:
+        # Use whatever we have cached for this corp; missing structures will
+        # be added over time as anyone with access loads them via /universe/.
+        cached = await database.list_structures_by_owner(CORP_ID)
+        citadels_full = cached
+    else:
+        # Seed cache with full info so non-directors benefit on future loads.
+        await asyncio.gather(*[
+            database.cache_structure_name(
+                c["structure_id"], c["name"],
+                c.get("type_id"), c.get("system_id"), CORP_ID,
+            )
+            for c in citadels_full if c.get("structure_id") and c.get("name")
+        ])
+
+    starbases = starbases or []
+
+    type_ids   = {s.get("type_id")   for s in citadels_full + starbases}
+    system_ids = {s.get("system_id") for s in citadels_full + starbases}
+    type_ids.discard(None); system_ids.discard(None)
 
     types_list, systems_list = await asyncio.gather(
         asyncio.gather(*[get_type_info(t) for t in type_ids]),
@@ -392,7 +405,7 @@ async def structures(session: str | None = Cookie(None)):
     types   = dict(zip(type_ids, types_list))
     systems = dict(zip(system_ids, systems_list))
 
-    for s in citadels + starbases:
+    for s in citadels_full + starbases:
         t = types.get(s.get("type_id"))
         sy = systems.get(s.get("system_id"))
         if t:
@@ -401,14 +414,12 @@ async def structures(session: str | None = Cookie(None)):
             s["system_name"] = sy["name"]
             s["security_status"] = sy.get("security_status")
 
-    # Seed structure_cache from corp citadel listing so non-directors viewing
-    # contracts get full names/types without needing docking rights.
-    await asyncio.gather(*[
-        cache_structure_name(c["structure_id"], c["name"], c.get("type_id"), c.get("system_id"))
-        for c in citadels if c.get("structure_id") and c.get("name")
-    ])
-
-    return {"citadels": citadels, "starbases": starbases}
+    return {
+        "citadels": citadels_full,
+        "starbases": starbases,
+        "limited_mode": limited_mode,
+        "starbases_error": starbases_err if limited_mode else None,
+    }
 
 
 @app.get("/api/starbases/{starbase_id}")

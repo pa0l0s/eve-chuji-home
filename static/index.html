@@ -179,14 +179,14 @@
     }
 
     .metric .val {
-      font-size: 1.4rem;
+      font-size: 1.55rem;
       font-weight: 700;
       color: #38bdf8;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
-    .metric .val.val-sm { font-size: 1.15rem; }
-    .metric .val.val-xs { font-size: 0.95rem; }
+    .metric .val.val-sm { font-size: 1.25rem; }
+    .metric .val.val-xs { font-size: 1rem; }
     .metric .unit { font-size: 0.7rem; color: #475569; margin-left: 0.25rem; }
 
     /* ── Progress ── */
@@ -1146,7 +1146,20 @@
         return;
       }
       hideError('structures-error');
-      renderStructures(await r.json());
+      const data = await r.json();
+      if (data.limited_mode) {
+        showError('structures-error',
+          'Limited view: full structure list requires Director or Station Manager role. ' +
+          'Showing only citadels seen by your account; live state and fuel data hidden.');
+        document.getElementById('structures-error').style.background = '#2d1a00';
+        document.getElementById('structures-error').style.borderColor = '#fb923c';
+        document.getElementById('structures-error').style.color = '#fcd34d';
+      } else {
+        document.getElementById('structures-error').style.background = '';
+        document.getElementById('structures-error').style.borderColor = '';
+        document.getElementById('structures-error').style.color = '';
+      }
+      renderStructures(data);
     } catch {
       showError('structures-error', 'Network error — could not load structures.');
     }
@@ -1865,8 +1878,8 @@
     const online = sectionData(m.online);
 
     const walletStr = fmtISK(wallet || 0);
-    // Long abbreviations (e.g. "100.00B") get a smaller font so they fit.
-    const valSizeCls = walletStr.length >= 6 ? ' val-sm' : '';
+    // Very long abbreviations (8+ chars) get a smaller font so they fit.
+    const valSizeCls = walletStr.length >= 8 ? ' val-sm' : '';
     const walletCell = walletErr
       ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
       : `<div class="metric">
