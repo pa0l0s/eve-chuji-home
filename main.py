@@ -488,11 +488,13 @@ async def member(session: str | None = Cookie(None)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Token refresh failed: {e}")
 
-    (char_data, char_err), (wallet, wallet_err), (skills, skills_err), \
+    # Wallet temporarily disabled — scope removed from auth.py.
+    wallet, wallet_unavailable = None, "Temporarily unavailable"
+
+    (char_data, char_err), (skills, skills_err), \
     (location, loc_err),   (online, online_err),  (ship, ship_err), \
     (attributes, attr_err), (skillqueue, sq_err) = await asyncio.gather(
         _safe(get_character(character_id, access_token)),
-        _safe(get_wallet(character_id, access_token)),
         _safe(get_skills(character_id, access_token)),
         _safe(get_character_location(character_id, access_token)),
         _safe(get_character_online(character_id, access_token)),
@@ -568,7 +570,7 @@ async def member(session: str | None = Cookie(None)):
     return {
         "character_id": character_id,
         "profile":    _wrap(profile,         char_err),
-        "wallet":     _wrap(wallet,          wallet_err),
+        "wallet":     {"data": None, "error": None, "unavailable": wallet_unavailable},
         "skills":     _wrap(skills_summary,  skills_err),
         "location":   _wrap(location_block,  loc_err),
         "online":     _wrap(online_block,    online_err),

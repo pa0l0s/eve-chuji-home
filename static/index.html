@@ -1721,12 +1721,18 @@
     const skills = sectionData(m.skills);
     const online = sectionData(m.online);
 
-    const walletCell = walletErr
-      ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
-      : `<div class="metric">
+    const walletUnavailable = m.wallet?.unavailable;
+    const walletCell = walletUnavailable
+      ? `<div class="metric">
            <div class="label">Wallet Balance</div>
-           <div class="val">${fmtISK(wallet || 0)}<span class="unit">ISK</span></div>
-         </div>`;
+           <div style="color:#64748b;font-size:0.85rem;font-style:italic;padding-top:0.2rem">${escHtml(walletUnavailable)}</div>
+         </div>`
+      : walletErr
+        ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
+        : `<div class="metric">
+             <div class="label">Wallet Balance</div>
+             <div class="val">${fmtISK(wallet || 0)}<span class="unit">ISK</span></div>
+           </div>`;
     const skillsCell = skillsErr
       ? `<div class="metric">${cardErrorBlock(skillsErr)}</div>`
       : `<div class="metric">
