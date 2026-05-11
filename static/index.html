@@ -1806,40 +1806,48 @@
       actions.innerHTML = '';
       return;
     }
+    const info = { ...(data.info || {}), fleet_id: data.fleet_id };
+    const saved = data.saved || [];
+
     if (!data.is_boss) {
-      content.innerHTML = `
-        <p class="contract-empty">
-          You are in fleet ${data.fleet_id} as <strong>${escHtml(data.your_role || '?')}</strong>.
-          Save / Load require Fleet Commander (boss) role.
-        </p>`;
       actions.innerHTML = '';
+      content.innerHTML = `
+        <div class="card full">
+          ${renderFleetInfoHeader(info, 0, false)}
+          <p style="color:#94a3b8;font-size:0.85rem;padding:0.5rem 0">
+            You are in this fleet as <strong>${escHtml(data.your_role || '?')}</strong>.
+            Saving, loading, and member-position changes require Fleet Commander (boss) role.
+          </p>
+        </div>`;
       return;
     }
 
     actions.innerHTML = `
       <button class="btn-action" onclick="fleetSave()">Save Positions</button>
       <button class="btn-action" id="btn-fleet-load" onclick="fleetLoad()"
-              ${(data.saved && data.saved.length) ? '' : 'disabled'}>
+              ${saved.length ? '' : 'disabled'}>
         Load Saved
       </button>`;
 
     const tree = data.tree;
-    const saved = data.saved || [];
+    const treeBlock = tree
+      ? renderFleetComparison(tree, saved)
+      : '<p style="color:#475569;font-size:0.85rem;padding:0.5rem 0">Fleet roster unavailable.</p>';
 
-    const info = { ...(data.info || {}), fleet_id: data.fleet_id };
     content.innerHTML = `
       <div class="card full">
-        ${renderFleetInfoHeader(info, saved.length)}
-        ${renderFleetComparison(tree, saved)}
+        ${renderFleetInfoHeader(info, saved.length, true)}
+        ${treeBlock}
       </div>`;
   }
 
-  function renderFleetInfoHeader(info, savedCount) {
-    // info.fleet_id isn't in the meta object; pass it via the call site if needed.
-    const flag = (on, label) => `
-      <span class="badge ${on ? 'badge-green' : 'badge-muted'}">
-        ${on ? '●' : '○'} ${label}
-      </span>`;
+  function renderFleetInfoHeader(info, savedCount, includeSaved) {
+    const flag = (val, label) => {
+      if (val === undefined) return `<span class="badge badge-muted">○ ${label}</span>`;
+      return `<span class="badge ${val ? 'badge-green' : 'badge-muted'}">
+                ${val ? '●' : '○'} ${label}
+              </span>`;
+    };
     const motdText = stripHtml(info.motd || '').trim();
     const motdBlock = motdText
       ? `<div>
@@ -1847,30 +1855,31 @@
            <div class="fleet-motd">${escHtml(motdText)}</div>
          </div>`
       : '';
-    return `
-      <div class="fleet-info">
-        <div class="fi-cell">
-          <div class="fi-label">Fleet ID</div>
-          <div class="fi-value" style="font-size:0.95rem">${info.fleet_id || '–'}</div>
-        </div>
-        <div class="fi-cell">
-          <div class="fi-label">Members</div>
-          <div class="fi-value">${fmtNum(info.member_count || 0)}</div>
-        </div>
-        <div class="fi-cell">
-          <div class="fi-label">Wings</div>
-          <div class="fi-value">${fmtNum(info.wing_count || 0)}</div>
-        </div>
-        <div class="fi-cell">
-          <div class="fi-label">Saved</div>
-          <div class="fi-value">${fmtNum(savedCount)}</div>
-        </div>
-      </div>
+    const cell = (label, value) => `
+      <div class="fi-cell">
+        <div class="fi-label">${label}</div>
+        <div class="fi-value">${value}</div>
+      </div>`;
+    const cells = [
+      cell('Fleet ID', `<span style="font-size:0.95rem">${info.fleet_id || '–'}</span>`),
+      cell('Members', info.member_count != null ? fmtNum(info.member_count) : '<span style="color:#475569;font-size:0.95rem">–</span>'),
+    ];
+    if (info.wing_count != null) cells.push(cell('Wings', fmtNum(info.wing_count)));
+    if (includeSaved)            cells.push(cell('Saved', fmtNum(savedCount)));
+
+    const haveAnyFlag = info.is_free_move !== undefined
+                      || info.is_registered !== undefined
+                      || info.is_voice_enabled !== undefined;
+    const flagsBlock = haveAnyFlag ? `
       <div class="fleet-flags">
         ${flag(info.is_free_move,     'Free Move')}
         ${flag(info.is_registered,    'Registered')}
         ${flag(info.is_voice_enabled, 'Voice Enabled')}
-      </div>
+      </div>` : '';
+
+    return `
+      <div class="fleet-info">${cells.join('')}</div>
+      ${flagsBlock}
       ${motdBlock}`;
   }
 
