@@ -14,7 +14,7 @@ import db as database
 from auth import (
     build_login_url, exchange_code, verify_token,
     make_session_cookie, read_session_cookie,
-    is_admin,
+    is_admin, get_holding_corporation_ids,
 )
 from esi import (
     get_valid_token, get_character, get_wallet, get_skills,
@@ -417,9 +417,11 @@ async def structures(session: str | None = Cookie(None)):
 
     limited_mode = citadels_full is None
     if limited_mode:
-        # Use whatever we have cached for this corp; missing structures will
-        # be added over time as anyone with access loads them via /universe/.
-        cached = await database.list_structures_by_owner(CORP_ID)
+        # Use cached structures owned by the main corp + any holding corps.
+        # Cache fills in over time as anyone resolves a structure via
+        # /universe/structures/ (contracts, docked location, etc.).
+        owner_ids = [CORP_ID, *get_holding_corporation_ids()]
+        cached = await database.list_structures_by_owners(owner_ids)
         citadels_full = cached
     else:
         # Seed cache with full info so non-directors benefit on future loads.

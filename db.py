@@ -217,12 +217,20 @@ async def clear_cache_table(table: str):
 
 
 async def list_structures_by_owner(owner_id: int) -> list[dict]:
+    return await list_structures_by_owners([owner_id])
+
+
+async def list_structures_by_owners(owner_ids: list[int]) -> list[dict]:
+    clean = [oid for oid in owner_ids if oid]
+    if not clean:
+        return []
+    placeholders = ",".join("?" * len(clean))
     async with aiosqlite.connect(_db_path()) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT structure_id, name, type_id, system_id "
-            "FROM structure_cache WHERE owner_id = ? ORDER BY name",
-            (owner_id,),
+            f"SELECT structure_id, name, type_id, system_id, owner_id "
+            f"FROM structure_cache WHERE owner_id IN ({placeholders}) ORDER BY name",
+            clean,
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
 

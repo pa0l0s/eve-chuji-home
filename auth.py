@@ -37,6 +37,14 @@ def is_admin(character_id: int) -> bool:
     return character_id in get_admin_character_ids()
 
 
+def get_holding_corporation_ids() -> set[int]:
+    """Extra corp IDs whose structures should appear in /api/structures.
+    Used when the main corp doesn't own structures directly (e.g. war-eligibility
+    rules) and a holding corp does."""
+    raw = os.getenv("HOLDING_CORPORATION_IDS", "")
+    return {int(s.strip()) for s in raw.split(",") if s.strip().isdigit()}
+
+
 def _signer() -> URLSafeSerializer:
     secret = os.getenv("SECRET_KEY")
     if not secret:
