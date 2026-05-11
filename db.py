@@ -254,6 +254,15 @@ async def delete_fleet_position(boss_id: int, member_id: int):
         await db.commit()
 
 
+async def delete_all_fleet_positions(boss_id: int) -> int:
+    async with aiosqlite.connect(_db_path()) as db:
+        cur = await db.execute(
+            "DELETE FROM fleet_positions WHERE boss_character_id = ?",
+            (boss_id,))
+        await db.commit()
+        return cur.rowcount or 0
+
+
 async def save_fleet_positions(boss_id: int, members: list[dict]):
     """Replace this boss's saved positions atomically with the supplied list.
     Each entry: {member_character_id, member_name, wing_name, squad_name, role}."""

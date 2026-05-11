@@ -306,6 +306,14 @@ async def fleet_saved_delete(member_id: int, session: str | None = Cookie(None))
     return {"ok": True}
 
 
+@app.delete("/api/fleet/saved")
+async def fleet_saved_clear_all(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    await _require_fleet_boss(character_id)
+    removed = await database.delete_all_fleet_positions(character_id)
+    return {"ok": True, "removed": removed}
+
+
 @app.post("/api/fleet/save")
 async def fleet_save(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)

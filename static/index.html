@@ -718,14 +718,15 @@
     .ft-cell-btn {
       background: #252a3d; border: 1px solid #2d3348;
       color: #64748b; cursor: pointer;
-      font-size: 0.7rem; padding: 0.05rem 0.4rem;
-      border-radius: 4px; margin-left: 0.4rem;
-      opacity: 0; transition: opacity 0.15s, color 0.15s, border-color 0.15s;
-      line-height: 1.2;
+      font-size: 0.75rem; padding: 0.1rem 0.45rem;
+      border-radius: 4px; margin-left: 0.5rem;
+      opacity: 0.55; transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
+      line-height: 1.2; vertical-align: middle;
     }
-    .fleet-cmp td:hover .ft-cell-btn { opacity: 0.7; }
-    .ft-cell-btn:hover { opacity: 1 !important; color: #38bdf8; border-color: #38bdf8; }
-    .ft-cell-btn.remove:hover { color: #f87171; border-color: #f87171; }
+    .fleet-cmp td:hover .ft-cell-btn { opacity: 1; }
+    .ft-cell-btn:hover { color: #38bdf8; border-color: #38bdf8; background: #0c2233; }
+    .ft-cell-btn.remove { color: #94a3b8; }
+    .ft-cell-btn.remove:hover { color: #f87171; border-color: #f87171; background: #2a0d0d; }
 
     .btn-action {
       background: #0c2233; border: 1px solid #38bdf8; color: #38bdf8;
@@ -1831,6 +1832,11 @@
       <button class="btn-action" id="btn-fleet-load" onclick="fleetLoad()"
               ${saved.length ? '' : 'disabled'}>
         Load Saved
+      </button>
+      <button class="btn-action" onclick="fleetClearSaved()"
+              style="border-color:#ef4444;color:#fca5a5"
+              ${saved.length ? '' : 'disabled'}>
+        Clear All Saved
       </button>`;
 
     const tree = data.tree;
@@ -2178,6 +2184,19 @@
       }
       loadFleet();
     } catch { showError('fleet-error', 'Network error during remove.'); }
+  }
+
+  async function fleetClearSaved() {
+    if (!confirm('Remove ALL saved member positions? This cannot be undone.')) return;
+    try {
+      const r = await fetch('/api/fleet/saved', { method: 'DELETE' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showError('fleet-error', 'Clear failed: ' + (d.detail || r.status));
+        return;
+      }
+      loadFleet();
+    } catch { showError('fleet-error', 'Network error during clear.'); }
   }
 
   async function fleetSave() {
