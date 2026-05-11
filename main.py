@@ -588,6 +588,7 @@ async def projects(session: str | None = Cookie(None)):
             print(f"Market enrichment failed for project {p.get('name')!r}: {e}")
 
     for p in active + closed:
+        _compute_project_warn(p)
         p["sort_priority"] = _project_priority(p)
 
     return {
@@ -611,16 +612,56 @@ PROJECT_LOOT_NAMES = {
     "Triglavian Survey Database",
 }
 
+# Warn-level thresholds:
+PROJECT_COMPLETION_RED      = 0.90   # ≥90% done → red frame, high priority
+PROJECT_COMPLETION_YELLOW   = 0.75   # ≥75% done → yellow frame
+PROJECT_PRICE_YELLOW_RATIO  = 0.075  # >7.5% off Jita target → yellow frame
+# (PRICE_DIFF_THRESHOLD imported from esi.py, default 0.15 → red)
+
+
+def _compute_project_warn(p: dict) -> None:
+    """Assigns p['warn_level'] ∈ {'red','yellow',None} and p['warn_reasons']."""
+    reasons: list[str] = []
+    is_red = is_yellow = False
+
+    progress = p.get("progress") or {}
+    desired = progress.get("desired") or 0
+    current = progress.get("current") or 0
+    if desired > 0:
+        pct = current / desired
+        if pct >= PROJECT_COMPLETION_RED:
+            is_red = True
+            reasons.append(f"{pct * 100:.1f}% complete")
+        elif pct >= PROJECT_COMPLETION_YELLOW:
+            is_yellow = True
+            reasons.append(f"{pct * 100:.1f}% complete")
+
+    market = p.get("market")
+    if market and market.get("diff_ratio") is not None:
+        diff = market["diff_ratio"]
+        if diff > PRICE_DIFF_THRESHOLD:
+            is_red = True
+            reasons.append(f"Price off by {diff * 100:.1f}%")
+        elif diff > PROJECT_PRICE_YELLOW_RATIO:
+            is_yellow = True
+            reasons.append(f"Price off by {diff * 100:.1f}%")
+
+    p["warn_level"]   = "red" if is_red else ("yellow" if is_yellow else None)
+    p["warn_reasons"] = reasons
+
 
 def _project_priority(p: dict) -> int:
     name = p.get("name") or ""
+    warn = p.get("warn_level")
     if name in PROJECT_TRACKING_NAMES:
         return 1
-    if (p.get("market") or {}).get("needs_update"):
+    if warn == "red":
         return 2
-    if name in PROJECT_LOOT_NAMES:
+    if warn == "yellow":
         return 3
-    return 4
+    if name in PROJECT_LOOT_NAMES:
+        return 4
+    return 5
 
 
 @app.get("/api/projects/{project_id}/contributors")

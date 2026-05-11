@@ -238,6 +238,10 @@
       border-color: #ef4444;
       box-shadow: 0 0 0 1px #ef4444, 0 0 12px rgba(239, 68, 68, 0.2);
     }
+    .card-warn-yellow {
+      border-color: #fb923c;
+      box-shadow: 0 0 0 1px #fb923c, 0 0 10px rgba(251, 146, 60, 0.18);
+    }
 
     /* ── Table ── */
     table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.75rem; }
@@ -1638,16 +1642,26 @@
          </div>`
       : '';
     const m = p.market;
-    const needsUpdate = m?.needs_update;
-    const cardClass = (needsUpdate ? 'card card-warn' : 'card') + ' project-clickable';
-    const updateBadge = needsUpdate
-      ? '<span class="badge badge-red" style="margin-left:0.4rem">Update</span>'
+    const warn = p.warn_level;  // 'red' | 'yellow' | null
+    const cardClass = (warn === 'red' ? 'card card-warn'
+                     : warn === 'yellow' ? 'card card-warn-yellow'
+                     : 'card') + ' project-clickable';
+    const updateBadge = warn === 'red'
+      ? '<span class="badge badge-red"    style="margin-left:0.4rem">High Priority</span>'
+      : warn === 'yellow'
+        ? '<span class="badge badge-orange" style="margin-left:0.4rem">Warning</span>'
+        : '';
+    const reasonsBlock = (p.warn_reasons && p.warn_reasons.length)
+      ? `<div style="margin-top:0.4rem;font-size:0.7rem;color:${warn === 'red' ? '#f87171' : '#fb923c'}">
+           ${p.warn_reasons.map(escHtml).join(' · ')}
+         </div>`
       : '';
+    const priceColor = warn === 'red' ? '#fca5a5' : warn === 'yellow' ? '#fcd34d' : '#e2e8f0';
     const marketBlock = m ? `
       <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid #2d3348;font-size:0.75rem">
         <div style="display:flex;justify-content:space-between;color:#94a3b8;margin-bottom:0.2rem">
           <span>Project Price</span>
-          <span style="color:${needsUpdate ? '#fca5a5' : '#e2e8f0'};font-weight:600">
+          <span style="color:${priceColor};font-weight:600">
             ${fmtISK(m.project_price)} ISK/u
           </span>
         </div>
@@ -1659,11 +1673,6 @@
           <span>Market high (Jita 4-4)</span>
           <span>${fmtISK(m.jita_buy_max)} ISK/u</span>
         </div>
-        ${needsUpdate
-          ? `<div style="margin-top:0.4rem;font-size:0.7rem;color:#f87171">
-               Off by ${(m.diff_ratio * 100).toFixed(1)}% — review reward
-             </div>`
-          : ''}
       </div>` : '';
     return `
       <div class="${cardClass}" onclick="openProjectContributors('${p.id}')">
@@ -1678,6 +1687,7 @@
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
+        ${reasonsBlock}
         ${reward}
         ${marketBlock}
         <div style="margin-top:0.75rem;font-size:0.7rem;color:#475569">
