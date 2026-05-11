@@ -1751,6 +1751,7 @@
 
   async function loadMember() {
     hideError('member-error');
+    pendingContracts = null;
     // Show skeleton immediately, then load profile + contracts in parallel.
     renderMemberSkeleton();
     fetchSection('/api/member',         renderMemberProfile,   'profile-error');
@@ -1822,11 +1823,21 @@
         <div class="skeleton" style="height:60px"></div>
       </div>`;
     fetchCorpName(sectionData(m.profile)?.corporation_id);
+    // If contracts already arrived before this profile render, flush them now.
+    if (pendingContracts) {
+      const { data, error } = pendingContracts;
+      renderMemberContracts(data, error);
+    }
   }
 
   function renderMemberContracts(data, error) {
     const card = document.getElementById('contracts-card');
-    if (!card) return; // profile not rendered yet
+    if (!card) {
+      // Profile hasn't created the card yet; stash and let renderMemberProfile flush.
+      pendingContracts = { data, error };
+      return;
+    }
+    pendingContracts = null;
     if (error) {
       card.innerHTML = `
         <div class="card-title">Your Contracts</div>
@@ -2123,6 +2134,10 @@
   // ── Personal contracts (member card) ──────────────────────────────────────
 
   let personalContractsCache = null;
+  // Holds the most recent /api/me/contracts result if it arrived before
+  // the profile fetch created the contracts-card DOM node. Flushed and
+  // rendered as soon as the profile completes.
+  let pendingContracts = null;
   const personalSort = { col: 'priority', dir: 'asc' };
 
   function contractCountsBadge(list) {
