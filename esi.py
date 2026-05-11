@@ -259,9 +259,14 @@ async def _fetch_structure(structure_id: int, access_token: str) -> dict | None:
 
 
 async def get_structure_info(structure_id: int, access_token: str) -> dict:
-    """Returns {name, type_id, system_id} for a citadel. Caches successful lookups."""
+    """Returns {name, type_id, system_id, owner_id} for a citadel.
+    Caches successful lookups; old cache entries lacking type_id or owner_id
+    are refreshed automatically so the Structures limited-mode view can find
+    corp-owned citadels."""
     cached = await get_cached_structure(structure_id)
-    if cached and cached.get("name") and cached.get("type_id"):
+    if (cached and cached.get("name")
+            and cached.get("type_id")
+            and cached.get("owner_id")):
         return cached  # Fully resolved.
 
     info = await _fetch_structure(structure_id, access_token)
