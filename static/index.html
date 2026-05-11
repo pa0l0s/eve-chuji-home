@@ -608,26 +608,51 @@
 
     .badge-purple { background: #1e1633; color: #c4b5fd; }
 
-    /* ── Fleet tree ── */
-    .fleet-node { padding: 0.4rem 0.6rem; border-radius: 6px; }
-    .fleet-node-row {
-      display: flex; align-items: center; gap: 0.6rem;
-      font-size: 0.85rem; padding: 0.35rem 0;
+    /* ── Fleet 3-column comparison ── */
+    .fleet-cmp { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .fleet-cmp th {
+      text-align: left; padding: 0.5rem 0.6rem;
+      color: #64748b; font-size: 0.7rem;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      border-bottom: 1px solid #2d3348;
     }
-    .fleet-node-row .ft-role {
-      font-size: 0.6rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.06em; color: #475569;
-      min-width: 60px;
+    .fleet-cmp td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid #1a1e2e;
+      color: #94a3b8; vertical-align: middle;
     }
-    .fleet-node-row .ft-portrait { width: 24px; height: 24px; border-radius: 50%; background: #252a3d; flex-shrink: 0; }
-    .fleet-node-row .ft-name { color: #e2e8f0; }
-    .fleet-children { margin-left: 1.5rem; border-left: 1px solid #2d3348; padding-left: 0.75rem; }
-    .fleet-section-title {
-      font-size: 0.8rem; font-weight: 700; color: #f8fafc;
-      padding: 0.4rem 0;
+    .fleet-cmp tr.section td {
+      background: #181b27; color: #f8fafc;
+      font-weight: 700; padding: 0.55rem 0.6rem;
     }
-    .fleet-section-title .ft-icon { color: #38bdf8; margin-right: 0.3rem; }
-    .fleet-empty-slot { color: #475569; font-size: 0.75rem; font-style: italic; padding: 0.3rem 0; }
+    .fleet-cmp tr.subsection td {
+      background: #14171f; color: #cbd5e1;
+      font-weight: 600; padding: 0.45rem 0.6rem;
+    }
+    .fleet-cmp .ft-pos    { color: #e2e8f0; font-weight: 500; }
+    .fleet-cmp .ft-role   {
+      font-size: 0.6rem; font-weight: 700; color: #475569;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-right: 0.4rem;
+    }
+    .fleet-cmp .indent-1 { padding-left: 1.4rem !important; }
+    .fleet-cmp .indent-2 { padding-left: 2.6rem !important; }
+    .fleet-cmp .indent-3 { padding-left: 3.8rem !important; }
+    .fleet-cmp .ft-empty { color: #475569; font-style: italic; font-size: 0.75rem; }
+    .fleet-cmp .ft-portrait {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: #252a3d; vertical-align: middle; margin-right: 0.4rem;
+    }
+    .fleet-cmp tr.row-match    td:not(:first-child) { color: #94a3b8; }
+    .fleet-cmp tr.row-mismatch td.col-current { background: rgba(251, 146, 60, 0.06); }
+    .fleet-cmp tr.row-mismatch td.col-saved   { background: rgba(251, 146, 60, 0.06); }
+    .fleet-cmp .match-dot {
+      display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+      margin-right: 0.4rem; vertical-align: middle;
+    }
+    .match-dot.match    { background: #4ade80; }
+    .match-dot.mismatch { background: #fb923c; }
+    .match-dot.empty    { background: #475569; }
 
     .btn-action {
       background: #0c2233; border: 1px solid #38bdf8; color: #38bdf8;
@@ -1702,76 +1727,125 @@
       </button>`;
 
     const tree = data.tree;
-    const savedNote = (data.saved && data.saved.length)
+    const saved = data.saved || [];
+    const savedNote = saved.length
       ? `<div style="color:#64748b;font-size:0.75rem;margin-bottom:0.75rem">
-           ${data.saved.length} saved member positions on file.
+           ${saved.length} saved member positions on file.
          </div>`
       : '<div style="color:#475569;font-size:0.75rem;margin-bottom:0.75rem">No saved layout yet.</div>';
 
     content.innerHTML = `
       <div class="card full">
         ${savedNote}
-        ${renderFleetTree(tree)}
+        ${renderFleetComparison(tree, saved)}
       </div>`;
   }
 
-  function renderFleetTree(tree) {
-    const fc = tree.commander;
-    const fcRow = fc
-      ? fleetMemberRow(fc, 'FC')
-      : '<div class="fleet-empty-slot">No fleet commander</div>';
+  function renderFleetComparison(tree, saved) {
+    // Index saved positions by role + path for quick lookup.
+    const savedFC = saved.find(s => s.role === 'fleet_commander') || null;
+    const savedWC = new Map();           // wing_name → entry
+    const savedSC = new Map();           // "wing_name|squad_name" → entry
+    const savedMembers = new Map();      // "wing_name|squad_name" → array
+    for (const s of saved) {
+      if (s.role === 'wing_commander')   savedWC.set(s.wing_name || '', s);
+      else if (s.role === 'squad_commander') savedSC.set(`${s.wing_name}|${s.squad_name}`, s);
+      else if (s.role === 'squad_member') {
+        const k = `${s.wing_name}|${s.squad_name}`;
+        if (!savedMembers.has(k)) savedMembers.set(k, []);
+        savedMembers.get(k).push(s);
+      }
+    }
+
+    const rows = [];
+
+    // Fleet Commander row
+    rows.push(cmpRow('Fleet', 'FC', tree.commander, savedFC, 0));
+
+    for (const w of tree.wings) {
+      // Wing section header
+      rows.push(sectionRow('section', w.name, 1));
+      // Wing Commander row
+      rows.push(cmpRow(w.name, 'WC', w.commander, savedWC.get(w.name) || null, 2));
+
+      for (const sq of w.squads) {
+        rows.push(sectionRow('subsection', sq.name, 2));
+        const key = `${w.name}|${sq.name}`;
+
+        // Squad Commander row
+        rows.push(cmpRow(sq.name, 'SC', sq.commander, savedSC.get(key) || null, 3));
+
+        // Squad member rows — union of current and saved.
+        const curById = new Map(sq.members.map(m => [m.character_id, m]));
+        const savById = new Map((savedMembers.get(key) || []).map(s => [s.member_character_id, s]));
+        const ids = new Set([...curById.keys(), ...savById.keys()]);
+        if (!ids.size) {
+          rows.push(`<tr><td class="indent-3 ft-empty">— empty —</td><td></td><td></td></tr>`);
+        } else {
+          for (const id of ids) {
+            const cur = curById.get(id);
+            const sav = savById.get(id);
+            rows.push(memberCmpRow(cur, sav, 3));
+          }
+        }
+      }
+    }
+
     return `
-      <div class="fleet-node">
-        <div class="fleet-section-title"><span class="ft-icon">▸</span>Fleet</div>
-        <div class="fleet-children">
-          ${fcRow}
-          ${tree.wings.map(renderWingNode).join('')}
-        </div>
-      </div>`;
+      <table class="fleet-cmp">
+        <thead>
+          <tr><th style="width:35%">Position</th><th>Current</th><th>Saved</th></tr>
+        </thead>
+        <tbody>
+          ${rows.join('')}
+        </tbody>
+      </table>`;
   }
 
-  function renderWingNode(w) {
-    const wc = w.commander;
-    const wcRow = wc
-      ? fleetMemberRow(wc, 'WC')
-      : '<div class="fleet-empty-slot">No wing commander</div>';
-    return `
-      <div class="fleet-node">
-        <div class="fleet-section-title"><span class="ft-icon">▸</span>${escHtml(w.name)}</div>
-        <div class="fleet-children">
-          ${wcRow}
-          ${w.squads.map(renderSquadNode).join('')}
-        </div>
-      </div>`;
+  function sectionRow(cls, name, indent) {
+    return `<tr class="${cls}"><td class="indent-${indent}" colspan="3">${escHtml(name)}</td></tr>`;
   }
 
-  function renderSquadNode(sq) {
-    const sc = sq.commander;
-    const scRow = sc
-      ? fleetMemberRow(sc, 'SC')
-      : '<div class="fleet-empty-slot">No squad commander</div>';
-    const members = sq.members.length
-      ? sq.members.map(m => fleetMemberRow(m, '')).join('')
-      : '<div class="fleet-empty-slot">— empty —</div>';
+  function cmpRow(posName, role, current, saved, indent) {
+    const curName = current?.character_name || null;
+    const savName = saved?.member_name || null;
+    const matchCls = matchClass(current?.character_id, saved?.member_character_id);
     return `
-      <div class="fleet-node">
-        <div class="fleet-section-title"><span class="ft-icon">▸</span>${escHtml(sq.name)}</div>
-        <div class="fleet-children">
-          ${scRow}
-          ${members}
-        </div>
-      </div>`;
+      <tr class="${matchCls}">
+        <td class="indent-${indent}"><span class="ft-role">${role}</span></td>
+        <td class="col-current">${memberCell(current?.character_id, curName)}</td>
+        <td class="col-saved">${memberCell(saved?.member_character_id, savName)}</td>
+      </tr>`;
   }
 
-  function fleetMemberRow(m, roleLabel) {
+  function memberCmpRow(current, saved, indent) {
+    const curId = current?.character_id;
+    const curName = current?.character_name;
+    const savId = saved?.member_character_id;
+    const savName = saved?.member_name;
+    const matchCls = matchClass(curId, savId);
     return `
-      <div class="fleet-node-row">
-        <span class="ft-role">${roleLabel}</span>
-        <img class="ft-portrait"
-             src="https://images.evetech.net/characters/${m.character_id}/portrait?size=32" alt="">
-        <span class="ft-name">${escHtml(m.character_name || '?')}</span>
-        ${characterZkillLink(m.character_id)}
-      </div>`;
+      <tr class="${matchCls}">
+        <td class="indent-${indent}"><span class="ft-role">Member</span></td>
+        <td class="col-current">${memberCell(curId, curName)}</td>
+        <td class="col-saved">${memberCell(savId, savName)}</td>
+      </tr>`;
+  }
+
+  function memberCell(charId, name) {
+    if (!name && !charId) return '<span class="ft-empty">—</span>';
+    if (!name) return `<span class="ft-empty">${charId}</span>`;
+    return `
+      <img class="ft-portrait" src="https://images.evetech.net/characters/${charId}/portrait?size=32" alt="">
+      <span style="color:#e2e8f0">${escHtml(name)}</span>
+      ${characterZkillLink(charId)}`;
+  }
+
+  function matchClass(curId, savId) {
+    if (curId && savId && curId === savId) return 'row-match';
+    if (curId && savId && curId !== savId) return 'row-mismatch';
+    if (!curId && !savId) return '';
+    return 'row-mismatch';  // one side present, other empty
   }
 
   async function fleetSave() {
