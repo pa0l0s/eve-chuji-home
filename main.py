@@ -521,13 +521,11 @@ async def member(session: str | None = Cookie(None)):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Token refresh failed: {e}")
 
-    # Wallet temporarily disabled — scope removed from auth.py.
-    wallet, wallet_unavailable = None, "Temporarily unavailable"
-
-    (char_data, char_err), (skills, skills_err), \
+    (char_data, char_err), (wallet, wallet_err), (skills, skills_err), \
     (location, loc_err),   (online, online_err),  (ship, ship_err), \
     (attributes, attr_err), (skillqueue, sq_err) = await asyncio.gather(
         _safe(get_character(character_id, access_token)),
+        _safe(get_wallet(character_id, access_token)),
         _safe(get_skills(character_id, access_token)),
         _safe(get_character_location(character_id, access_token)),
         _safe(get_character_online(character_id, access_token)),
@@ -603,7 +601,7 @@ async def member(session: str | None = Cookie(None)):
     return {
         "character_id": character_id,
         "profile":    _wrap(profile,         char_err),
-        "wallet":     {"data": None, "error": None, "unavailable": wallet_unavailable},
+        "wallet":     _wrap(wallet,          wallet_err),
         "skills":     _wrap(skills_summary,  skills_err),
         "location":   _wrap(location_block,  loc_err),
         "online":     _wrap(online_block,    online_err),
@@ -611,6 +609,21 @@ async def member(session: str | None = Cookie(None)):
         "attributes": _wrap(attributes,      attr_err),
         "skillqueue": _wrap(skillqueue_block, sq_err),
     }
+
+
+@app.get("/api/me/wallet")
+async def my_wallet(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        balance = await get_wallet(character_id, access_token)
+        return {"balance": balance}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403, detail="Missing scope: read_character_wallet")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
 
 
 @app.get("/api/me/contracts")

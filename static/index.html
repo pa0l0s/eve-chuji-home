@@ -83,6 +83,21 @@
     }
     .tq-count { color: #38bdf8; font-variant-numeric: tabular-nums; }
 
+    .nav-wallet {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      padding: 0.25rem 0.55rem;
+      background: #252a3d;
+      border-radius: 6px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+    .nav-wallet .nw-label { color: #475569; }
+    .nav-wallet .nw-val   { color: #38bdf8; font-variant-numeric: tabular-nums; }
+
     .nav-char { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #94a3b8; }
 
     .nav-portrait {
@@ -636,6 +651,9 @@
       <div class="tq-status" id="tq-status" title="EVE Tranquility status">
         <span class="tq-dot"></span><span>TQ</span>
       </div>
+      <div class="nav-wallet hidden" id="nav-wallet" title="Wallet balance">
+        <span class="nw-label">ISK</span><span class="nw-val">–</span>
+      </div>
       <div class="nav-char">
         <img id="nav-portrait" class="nav-portrait" src="" alt="">
         <span id="nav-name"></span>
@@ -748,7 +766,27 @@
       show('view-app');
       showView('contracts');
       pollServerStatus();
+      pollWallet();
     } catch { show('view-login'); }
+  }
+
+  async function pollWallet() {
+    try {
+      const r = await fetch('/api/me/wallet');
+      if (r.ok) {
+        const d = await r.json();
+        renderNavWallet(d.balance);
+      }
+    } catch {}
+    setTimeout(pollWallet, 90000);
+  }
+
+  function renderNavWallet(balance) {
+    const el = document.getElementById('nav-wallet');
+    if (!el || balance == null) return;
+    el.classList.remove('hidden');
+    el.querySelector('.nw-val').textContent = fmtISK(balance);
+    el.title = `Wallet: ${new Intl.NumberFormat().format(Math.round(balance))} ISK`;
   }
 
   async function pollServerStatus() {
@@ -1810,18 +1848,12 @@
     const skills = sectionData(m.skills);
     const online = sectionData(m.online);
 
-    const walletUnavailable = m.wallet?.unavailable;
-    const walletCell = walletUnavailable
-      ? `<div class="metric">
+    const walletCell = walletErr
+      ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
+      : `<div class="metric">
            <div class="label">Wallet Balance</div>
-           <div style="color:#64748b;font-size:0.85rem;font-style:italic;padding-top:0.2rem">${escHtml(walletUnavailable)}</div>
-         </div>`
-      : walletErr
-        ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
-        : `<div class="metric">
-             <div class="label">Wallet Balance</div>
-             <div class="val">${fmtISK(wallet || 0)}<span class="unit">ISK</span></div>
-           </div>`;
+           <div class="val">${fmtISK(wallet || 0)}<span class="unit">ISK</span></div>
+         </div>`;
     const skillsCell = skillsErr
       ? `<div class="metric">${cardErrorBlock(skillsErr)}</div>`
       : `<div class="metric">
@@ -1916,9 +1948,6 @@
 
     const currentBlock = current
       ? (() => {
-          const startSP = current.training_start_sp ?? current.level_start_sp ?? 0;
-          const endSP = current.level_end_sp ?? 0;
-          const totalRange = endSP - startSP;
           let pct = 0;
           if (current.start_date && current.finish_date) {
             const s = new Date(current.start_date).getTime();
@@ -1942,8 +1971,8 @@
               <div style="height:6px;background:#1a1e2e;border-radius:3px;overflow:hidden">
                 <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
               </div>
-              <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
-                ${fmtNum(Math.round(startSP + totalRange * pct / 100))} / ${fmtNum(endSP)} SP
+              <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem;text-align:right">
+                ${pct.toFixed(1)}% complete
               </div>
             </div>`;
         })()
