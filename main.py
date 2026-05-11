@@ -277,6 +277,9 @@ async def projects(session: str | None = Cookie(None)):
         except Exception as e:
             print(f"Market enrichment failed for project {p.get('name')!r}: {e}")
 
+    for p in active + closed:
+        p["sort_priority"] = _project_priority(p)
+
     return {
         "active": active,
         "closed": closed,
@@ -286,6 +289,28 @@ async def projects(session: str | None = Cookie(None)):
         },
         "market_error": market_error,
     }
+
+
+# Special-case priority buckets for the project list (lower number = higher priority).
+PROJECT_TRACKING_NAMES = {"Remote Boost Shield", "Armor Remote Repair"}
+PROJECT_LOOT_NAMES = {
+    "Sleeper Data Library",
+    "Ancient Coordinates Database",
+    "Neural Network Analyzer",
+    "Sleeper Drone AI Nexus",
+    "Triglavian Survey Database",
+}
+
+
+def _project_priority(p: dict) -> int:
+    name = p.get("name") or ""
+    if name in PROJECT_TRACKING_NAMES:
+        return 1
+    if (p.get("market") or {}).get("needs_update"):
+        return 2
+    if name in PROJECT_LOOT_NAMES:
+        return 3
+    return 4
 
 
 @app.get("/api/projects/{project_id}/contributors")

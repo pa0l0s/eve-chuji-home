@@ -551,6 +551,40 @@
     .card.project-clickable:hover { border-color: #38bdf8; }
     .card.project-clickable:active { transform: translateY(1px); }
 
+    .proj-sort-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+      max-width: 1200px;
+      margin-left: auto;
+      margin-right: auto;
+      flex-wrap: wrap;
+    }
+    .proj-sort-label {
+      color: #475569;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 0.3rem;
+    }
+    .proj-sort-btn {
+      background: none;
+      border: 1px solid #2d3348;
+      color: #94a3b8;
+      padding: 0.3rem 0.7rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 600;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .proj-sort-btn:hover { color: #e2e8f0; border-color: #475569; }
+    .proj-sort-btn.active { color: #38bdf8; border-color: #38bdf8; background: #0c2233; }
+    .proj-sort-arrow { margin-left: 0.25rem; font-size: 0.65rem; }
+
+    .badge-purple { background: #1e1633; color: #c4b5fd; }
+
     /* ── Hidden ── */
     .hidden { display: none !important; }
   </style>
@@ -641,6 +675,13 @@
         <button class="tab-btn" id="tab-closed" onclick="showProjectTab('closed')">
           Closed <span class="tab-count" id="count-closed">0</span>
         </button>
+      </div>
+      <div class="proj-sort-bar">
+        <span class="proj-sort-label">Sort by</span>
+        <button class="proj-sort-btn" id="proj-sort-priority" onclick="setProjectSort('priority')">Priority</button>
+        <button class="proj-sort-btn" id="proj-sort-name"     onclick="setProjectSort('name')">Name</button>
+        <button class="proj-sort-btn" id="proj-sort-progress" onclick="setProjectSort('progress')">Progress</button>
+        <button class="proj-sort-btn" id="proj-sort-value"    onclick="setProjectSort('value')">Value</button>
       </div>
       <div id="pane-active" class="contract-pane"></div>
       <div id="pane-closed" class="contract-pane hidden"></div>
@@ -1242,6 +1283,60 @@
 
   let projectsTimer = null;
   let projectsCache = null;
+  const projectSort = { col: 'priority', dir: 'asc' };
+
+  function projectSortVal(p, col) {
+    switch (col) {
+      case 'priority': return p.sort_priority ?? 999;
+      case 'name':     return (p.name || '').toLowerCase();
+      case 'progress': {
+        const cur = p.progress?.current ?? 0;
+        const des = p.progress?.desired ?? 0;
+        return des > 0 ? cur / des : 0;
+      }
+      case 'value':    return p.reward?.initial ?? 0;
+      default:         return 0;
+    }
+  }
+
+  function sortProjects(list) {
+    const { col, dir } = projectSort;
+    const sorted = [...list].sort((a, b) => {
+      const va = projectSortVal(a, col);
+      const vb = projectSortVal(b, col);
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      // tie-breaker: name asc
+      const na = (a.name || '').toLowerCase();
+      const nb = (b.name || '').toLowerCase();
+      return na < nb ? -1 : na > nb ? 1 : 0;
+    });
+    return dir === 'desc' ? sorted.reverse() : sorted;
+  }
+
+  function setProjectSort(col) {
+    if (projectSort.col === col) {
+      projectSort.dir = projectSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      projectSort.col = col;
+      projectSort.dir = (col === 'progress' || col === 'value') ? 'desc' : 'asc';
+    }
+    updateProjectSortButtons();
+    if (projectsCache) renderProjects(projectsCache);
+  }
+
+  function updateProjectSortButtons() {
+    ['priority', 'name', 'progress', 'value'].forEach(c => {
+      const btn = document.getElementById('proj-sort-' + c);
+      if (!btn) return;
+      const active = projectSort.col === c;
+      btn.classList.toggle('active', active);
+      const base = c[0].toUpperCase() + c.slice(1);
+      btn.innerHTML = active
+        ? `${base}<span class="proj-sort-arrow">${projectSort.dir === 'asc' ? '▲' : '▼'}</span>`
+        : base;
+    });
+  }
 
   async function loadProjects() {
     if (projectsTimer) clearTimeout(projectsTimer);
@@ -1273,14 +1368,16 @@
     const { active = [], closed = [], market_error } = data;
     document.getElementById('count-active').textContent = active.length;
     document.getElementById('count-closed').textContent = closed.length;
+    updateProjectSortButtons();
     const marketNotice = market_error
       ? `<div class="card-error" style="margin-bottom:1rem">
            Market price comparison unavailable: ${escHtml(market_error)}
          </div>`
       : '';
     document.getElementById('pane-active').innerHTML =
-      marketNotice + projectListHtml(active, 'No active projects.');
-    document.getElementById('pane-closed').innerHTML = projectListHtml(closed, 'No closed projects.');
+      marketNotice + projectListHtml(sortProjects(active), 'No active projects.');
+    document.getElementById('pane-closed').innerHTML =
+      projectListHtml(sortProjects(closed), 'No closed projects.');
   }
 
   function projectListHtml(projects, emptyMsg) {
@@ -1330,7 +1427,7 @@
       <div class="${cardClass}" onclick="openProjectContributors('${p.id}')">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:0.5rem;margin-bottom:0.75rem">
           <div style="font-size:0.95rem;font-weight:600;color:#f8fafc">${escHtml(p.name)}</div>
-          <div>${stateBadge(p.state)}${updateBadge}</div>
+          <div>${projectPriorityBadge(p.sort_priority)}${stateBadge(p.state)}${updateBadge}</div>
         </div>
         <div class="progress-wrap">
           <div class="progress-label">
@@ -1421,6 +1518,13 @@
     }).join('');
 
     return header + rows;
+  }
+
+  function projectPriorityBadge(prio) {
+    // Priority 2 (Update needed) already gets its own badge from the market block.
+    if (prio === 1) return '<span class="badge badge-purple" style="margin-right:0.3rem">Track</span>';
+    if (prio === 3) return '<span class="badge badge-green" style="margin-right:0.3rem">Loot</span>';
+    return '';
   }
 
   function stateBadge(state) {
