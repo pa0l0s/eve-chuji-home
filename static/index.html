@@ -1806,21 +1806,22 @@
       actions.innerHTML = '';
       return;
     }
-    const info = { ...(data.info || {}), fleet_id: data.fleet_id };
     const saved = data.saved || [];
 
     if (!data.is_boss) {
       actions.innerHTML = '';
       content.innerHTML = `
         <div class="card full">
-          ${renderFleetInfoHeader(info, 0, false)}
+          ${renderNonBossFleetHeader(data)}
           <p style="color:#94a3b8;font-size:0.85rem;padding:0.5rem 0">
-            You are in this fleet as <strong>${escHtml(data.your_role || '?')}</strong>.
+            You are in this fleet as <strong>${escHtml(roleLabel(data.your_role))}</strong>.
             Saving, loading, and member-position changes require Fleet Commander (boss) role.
           </p>
         </div>`;
       return;
     }
+
+    const info = { ...(data.info || {}), fleet_id: data.fleet_id };
 
     actions.innerHTML = `
       <button class="btn-action" onclick="fleetSave()">Save Positions</button>
@@ -1838,6 +1839,49 @@
       <div class="card full">
         ${renderFleetInfoHeader(info, saved.length, true)}
         ${treeBlock}
+      </div>`;
+  }
+
+  function roleLabel(role) {
+    return ({
+      fleet_commander: 'Fleet Commander',
+      wing_commander:  'Wing Commander',
+      squad_commander: 'Squad Commander',
+      squad_member:    'Squad Member',
+    }[role] || role || '?');
+  }
+
+  function renderNonBossFleetHeader(data) {
+    const bossId   = data.fleet_boss_id;
+    const bossName = data.fleet_boss_name || (bossId ? 'Char ' + bossId : '?');
+    const bossCell = bossId
+      ? `<div style="display:flex;align-items:center;gap:0.5rem">
+           <img src="https://images.evetech.net/characters/${bossId}/portrait?size=64"
+                style="width:32px;height:32px;border-radius:50%;background:#252a3d">
+           <div>
+             <div style="font-size:0.85rem;color:#e2e8f0;font-weight:600">
+               ${escHtml(bossName)} ${characterZkillLink(bossId)}
+             </div>
+             <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">
+               Fleet Boss
+             </div>
+           </div>
+         </div>`
+      : '<span style="color:#475569">No boss info</span>';
+    return `
+      <div class="fleet-info">
+        <div class="fi-cell">
+          <div class="fi-label">Fleet ID</div>
+          <div class="fi-value" style="font-size:0.95rem">${data.fleet_id || '–'}</div>
+        </div>
+        <div class="fi-cell" style="grid-column: span 2">
+          <div class="fi-label">Boss</div>
+          ${bossCell}
+        </div>
+        <div class="fi-cell">
+          <div class="fi-label">Your Role</div>
+          <div class="fi-value" style="font-size:0.95rem">${escHtml(roleLabel(data.your_role))}</div>
+        </div>
       </div>`;
   }
 

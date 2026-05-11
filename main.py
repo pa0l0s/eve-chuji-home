@@ -231,32 +231,39 @@ async def fleet_current(session: str | None = Cookie(None)):
         "fleet_boss_id": fleet_info.get("fleet_boss_id"),
         "is_boss": is_boss,
         "your_role": fleet_info.get("role"),
+        "your_wing_id": fleet_info.get("wing_id"),
+        "your_squad_id": fleet_info.get("squad_id"),
     }
 
-    # Attempt every fleet endpoint and surface partial info gracefully.
-    # Boss has full access; members typically get 403 on the boss-only ones.
-    (fleet_meta, _), (members, _), (wings, _) = await asyncio.gather(
-        _safe(get_fleet_info(fleet_info["fleet_id"], access_token)),
-        _safe(get_fleet_members(fleet_info["fleet_id"], access_token)),
-        _safe(get_fleet_wings(fleet_info["fleet_id"], access_token)),
-    )
+    if not is_boss:
+        # Only /characters/{id}/fleet/ is accessible to non-boss.
+        # Resolve fleet boss character name for the UI.
+        boss_id = fleet_info.get("fleet_boss_id")
+        if boss_id:
+            names = await resolve_names([boss_id])
+            response["fleet_boss_name"] = names.get(boss_id)
+        return response
 
-    info = dict(fleet_meta or {})
-    if members is not None:
-        info["member_count"] = len(members)
-    if wings is not None:
-        info["wing_count"] = len(wings)
+    # Boss path: full fleet info, roster, wings, saved layout.
+    try:
+        members, wings, fleet_meta = await asyncio.gather(
+            get_fleet_members(fleet_info["fleet_id"], access_token),
+            get_fleet_wings(fleet_info["fleet_id"], access_token),
+            get_fleet_info(fleet_info["fleet_id"], access_token),
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
 
-    if is_boss:
-        saved = await database.load_fleet_positions(character_id)
-        info["saved_count"] = len(saved)
-        response["saved"] = saved
-        if members is not None and wings is not None:
-            names = await resolve_names([m["character_id"] for m in members])
-            response["tree"] = _build_fleet_tree(members, wings, names)
-
-    if info:
-        response["info"] = info
+    saved = await database.load_fleet_positions(character_id)
+    names = await resolve_names([m["character_id"] for m in members])
+    response["tree"]  = _build_fleet_tree(members, wings, names)
+    response["saved"] = saved
+    response["info"] = {
+        **fleet_meta,
+        "member_count": len(members),
+        "wing_count":   len(wings),
+        "saved_count":  len(saved),
+    }
     return response
 
 
