@@ -451,27 +451,15 @@
     }
 
     /* ── Personal contracts list ── */
-    .pc-row {
-      display: grid;
-      grid-template-columns: 4px 1fr auto auto auto;
-      gap: 0.75rem;
-      align-items: center;
-      padding: 0.55rem 0.75rem;
-      border-bottom: 1px solid #1a1e2e;
-      font-size: 0.8rem;
+    tr.pc-critical { background: rgba(239, 68, 68, 0.04); }
+    tr.pc-done     { opacity: 0.55; }
+    td.pc-priority-cell {
+      border-left: 3px solid #2d3348;
+      padding-left: 0.6rem !important;
     }
-    .pc-row:last-child { border-bottom: none; }
-    .pc-row .pc-bar { width: 3px; height: 28px; border-radius: 2px; }
-    .pc-row.pc-critical .pc-bar { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
-    .pc-row.pc-warning  .pc-bar { background: #fb923c; }
-    .pc-row.pc-ok       .pc-bar { background: #4ade80; }
-    .pc-row.pc-done     .pc-bar { background: #2d3348; }
-    .pc-row.pc-critical { background: rgba(239, 68, 68, 0.04); }
-    .pc-row.pc-done     { opacity: 0.55; }
-
-    .pc-title { color: #e2e8f0; font-weight: 500; }
-    .pc-sub   { color: #64748b; font-size: 0.7rem; margin-top: 0.1rem; }
-
+    tr.pc-critical td.pc-priority-cell { border-left-color: #ef4444; }
+    tr.pc-warning  td.pc-priority-cell { border-left-color: #fb923c; }
+    tr.pc-ok       td.pc-priority-cell { border-left-color: #4ade80; }
     .pc-empty { color: #475569; font-size: 0.85rem; padding: 0.75rem 0; text-align: center; }
 
     /* ── System links ── */
@@ -1354,6 +1342,7 @@
         ${cardErrorBlock('Contracts: ' + error)}`;
       return;
     }
+    personalContractsCache = data;
     card.innerHTML = `
       <div class="card-title">Your Contracts ${contractCountsBadge(data.contracts)}</div>
       ${renderPersonalContracts(data.contracts, data.character_id)}`;
@@ -1634,6 +1623,9 @@
 
   // ── Personal contracts (member card) ──────────────────────────────────────
 
+  let personalContractsCache = null;
+  const personalSort = { col: 'priority', dir: 'asc' };
+
   function contractCountsBadge(list) {
     if (!list?.length) return '';
     const crit = list.filter(c => c.category === 'critical').length;
@@ -1644,37 +1636,99 @@
     return parts.join('');
   }
 
+  function personalSortVal(c, col) {
+    switch (col) {
+      case 'priority':     return c.priority ?? 999;
+      case 'title':        return (c.title || ('Contract #' + c.contract_id)).toLowerCase();
+      case 'counterparty': return (c.assignee_name || c.acceptor_name || c.issuer_name || '').toLowerCase();
+      case 'value':        return c.price || c.reward || c.buyout || 0;
+      case 'time':         return c.date_expired ? new Date(c.date_expired).getTime() : Infinity;
+      default:             return 0;
+    }
+  }
+
+  function sortPersonal(list) {
+    const { col, dir } = personalSort;
+    const sorted = [...list].sort((a, b) => {
+      const va = personalSortVal(a, col);
+      const vb = personalSortVal(b, col);
+      if (va < vb) return -1;
+      if (va > vb) return 1;
+      return 0;
+    });
+    return dir === 'desc' ? sorted.reverse() : sorted;
+  }
+
+  function setPersonalSort(col) {
+    if (personalSort.col === col) {
+      personalSort.dir = personalSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      personalSort.col = col;
+      personalSort.dir = (col === 'value' || col === 'time') ? 'desc' : 'asc';
+    }
+    if (personalContractsCache) renderMemberContracts(personalContractsCache, null);
+  }
+
+  function personalSortableTh(col, label) {
+    const s = personalSort;
+    const active = s.col === col;
+    const arrow = active ? (s.dir === 'asc' ? '▲' : '▼') : '↕';
+    const cls = 'sortable' + (active ? ' sort-active' : '');
+    return `<th class="${cls}" onclick="setPersonalSort('${col}')">${label}<span class="sort-arrow">${arrow}</span></th>`;
+  }
+
   function renderPersonalContracts(list, myId) {
     if (!list?.length) return '<p class="pc-empty">No personal contracts.</p>';
-    return list.map(c => {
-      const cat = c.category || 'ok';
-      const role = c.issuer_id === myId ? 'sent' : 'received';
-      const other = role === 'sent'
-        ? (c.assignee_name || c.acceptor_name || 'Public')
-        : (c.issuer_name || 'Unknown');
-      const value = c.price || c.reward || c.buyout || 0;
-      const valueStr = value > 0 ? fmtISK(value) + ' ISK' : '–';
-      const time = c.time_left_sec != null
-        ? (c.time_left_sec <= 0 ? 'expired' : fmtDuration(c.time_left_sec))
-        : (c.date_expired ? new Date(c.date_expired).toLocaleDateString() : '–');
-      const attention = c.attention
-        ? `<div class="pc-sub" style="color:${cat === 'critical' ? '#f87171' : '#fb923c'}">${escHtml(c.attention)}</div>`
-        : '';
-      return `
-        <div class="pc-row pc-${cat}">
-          <div class="pc-bar"></div>
-          <div>
-            <div class="pc-title">${escHtml(c.title || ('Contract #' + c.contract_id))}</div>
-            <div class="pc-sub">
-              ${typeLabel(c.type)} · ${role === 'sent' ? 'to' : 'from'} ${escHtml(other)} · ${escHtml(c.status || '')}
-            </div>
-            ${attention}
-          </div>
-          <div style="color:#38bdf8;font-weight:600;text-align:right;white-space:nowrap">${valueStr}</div>
-          <div style="color:#94a3b8;text-align:right;white-space:nowrap;font-size:0.75rem">${time}</div>
-          <div>${openInEveBtn(c.contract_id)}</div>
-        </div>`;
-    }).join('');
+    const sorted = sortPersonal(list);
+    return `<table>
+      <thead><tr>
+        ${personalSortableTh('priority', 'Priority')}
+        ${personalSortableTh('title', 'Title')}
+        ${personalSortableTh('counterparty', 'Counterparty')}
+        ${personalSortableTh('value', 'Value')}
+        ${personalSortableTh('time', 'Time Left')}
+        <th></th>
+      </tr></thead>
+      <tbody>
+        ${sorted.map(c => personalRow(c, myId)).join('')}
+      </tbody>
+    </table>`;
+  }
+
+  function personalRow(c, myId) {
+    const cat = c.category || 'ok';
+    const role = c.issuer_id === myId ? 'sent' : 'received';
+    const other = role === 'sent'
+      ? (c.assignee_name || c.acceptor_name || 'Public')
+      : (c.issuer_name || 'Unknown');
+    const value = c.price || c.reward || c.buyout || 0;
+    const valueStr = value > 0 ? fmtISK(value) + ' ISK' : '–';
+    const time = c.time_left_sec != null
+      ? (c.time_left_sec <= 0 ? 'expired' : fmtDuration(c.time_left_sec))
+      : (c.date_expired ? new Date(c.date_expired).toLocaleDateString() : '–');
+    const attention = c.attention
+      ? `<div style="font-size:0.7rem;color:${cat === 'critical' ? '#f87171' : '#fb923c'};margin-top:0.15rem">${escHtml(c.attention)}</div>`
+      : '';
+    const catLabel = {
+      critical: '<span style="color:#f87171;font-size:0.7rem;font-weight:700;text-transform:uppercase">Critical</span>',
+      warning:  '<span style="color:#fb923c;font-size:0.7rem;font-weight:700;text-transform:uppercase">Warning</span>',
+      ok:       '<span style="color:#4ade80;font-size:0.7rem;font-weight:700;text-transform:uppercase">OK</span>',
+      done:     '<span style="color:#475569;font-size:0.7rem;font-weight:700;text-transform:uppercase">Done</span>',
+    }[cat];
+    return `<tr class="pc-${cat}">
+      <td class="pc-priority-cell">${catLabel}</td>
+      <td style="color:#e2e8f0">
+        <div style="font-weight:500">${escHtml(c.title || ('Contract #' + c.contract_id))}</div>
+        <div style="color:#64748b;font-size:0.7rem;margin-top:0.1rem">
+          ${typeLabel(c.type)} · ${escHtml(c.status || '')}
+        </div>
+        ${attention}
+      </td>
+      <td style="color:#94a3b8">${role === 'sent' ? 'to ' : 'from '}${escHtml(other)}</td>
+      <td style="color:#38bdf8;font-weight:600;white-space:nowrap">${valueStr}</td>
+      <td style="color:#94a3b8;white-space:nowrap;font-size:0.75rem">${time}</td>
+      <td>${openInEveBtn(c.contract_id)}</td>
+    </tr>`;
   }
 
   function typeLabel(t) {
