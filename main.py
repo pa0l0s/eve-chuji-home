@@ -626,9 +626,21 @@ async def my_wallet(session: str | None = Cookie(None)):
         raise HTTPException(status_code=502, detail="ESI unavailable")
 
 
+# Per-character in-memory cache for personal contracts. Short TTL so the
+# Member page feels instant on repeated visits while still picking up new
+# contracts within roughly a minute.
+_contracts_cache: dict[int, tuple[float, dict]] = {}
+CONTRACTS_CACHE_TTL = 60  # seconds
+
+
 @app.get("/api/me/contracts")
 async def my_contracts(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
+
+    cached = _contracts_cache.get(character_id)
+    if cached and (time.time() - cached[0]) < CONTRACTS_CACHE_TTL:
+        return cached[1]
+
     try:
         access_token = await get_valid_token(character_id)
         contracts_raw = await get_character_contracts(character_id, access_token)
@@ -653,7 +665,10 @@ async def my_contracts(session: str | None = Cookie(None)):
         if c.get("assignee_id"): c["assignee_name"] = names.get(c["assignee_id"])
         if c.get("acceptor_id"): c["acceptor_name"] = names.get(c["acceptor_id"])
     contracts = sorted(contracts_raw, key=lambda c: (c["priority"], _parse_iso(c.get("date_issued")) or now))
-    return {"character_id": character_id, "contracts": contracts}
+
+    result = {"character_id": character_id, "contracts": contracts}
+    _contracts_cache[character_id] = (time.time(), result)
+    return result
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────

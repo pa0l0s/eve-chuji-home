@@ -178,8 +178,16 @@
       margin-bottom: 0.3rem;
     }
 
-    .metric .val { font-size: 1.6rem; font-weight: 700; color: #38bdf8; }
-    .metric .unit { font-size: 0.8rem; color: #475569; margin-left: 0.2rem; }
+    .metric .val {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #38bdf8;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .metric .val.val-sm { font-size: 1.15rem; }
+    .metric .val.val-xs { font-size: 0.95rem; }
+    .metric .unit { font-size: 0.7rem; color: #475569; margin-left: 0.25rem; }
 
     /* ── Progress ── */
     .progress-wrap { margin-top: 0.5rem; }
@@ -1671,7 +1679,15 @@
     // Show skeleton immediately, then load profile + contracts in parallel.
     renderMemberSkeleton();
     fetchSection('/api/member',         renderMemberProfile,   'profile-error');
-    fetchSection('/api/me/contracts',   renderMemberContracts, 'contracts-error');
+    // Contracts: instant render from sessionStorage if we have it, then revalidate.
+    const cached = sessionStorage.getItem('me-contracts');
+    if (cached) {
+      try { renderMemberContracts(JSON.parse(cached), null); } catch {}
+    }
+    fetchSection('/api/me/contracts', (data, err) => {
+      if (data) sessionStorage.setItem('me-contracts', JSON.stringify(data));
+      renderMemberContracts(data, err);
+    }, 'contracts-error');
   }
 
   async function fetchSection(url, renderer, errorId) {
@@ -1848,11 +1864,16 @@
     const skills = sectionData(m.skills);
     const online = sectionData(m.online);
 
+    const walletStr = fmtISK(wallet || 0);
+    // Long abbreviations (e.g. "100.00B") get a smaller font so they fit.
+    const valSizeCls = walletStr.length >= 6 ? ' val-sm' : '';
     const walletCell = walletErr
       ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
       : `<div class="metric">
            <div class="label">Wallet Balance</div>
-           <div class="val">${fmtISK(wallet || 0)}<span class="unit">ISK</span></div>
+           <div class="val${valSizeCls}" title="${new Intl.NumberFormat().format(Math.round(wallet || 0))} ISK">
+             ${walletStr}<span class="unit">ISK</span>
+           </div>
          </div>`;
     const skillsCell = skillsErr
       ? `<div class="metric">${cardErrorBlock(skillsErr)}</div>`
@@ -1948,12 +1969,18 @@
 
     const currentBlock = current
       ? (() => {
-          let pct = 0;
+          const trainStartSP = current.training_start_sp ?? current.level_start_sp ?? 0;
+          const endSP        = current.level_end_sp ?? 0;
+          // Time fraction through this training session.
+          let timeFrac = 0;
           if (current.start_date && current.finish_date) {
             const s = new Date(current.start_date).getTime();
             const f = new Date(current.finish_date).getTime();
-            if (f > s) pct = Math.max(0, Math.min(100, (now - s) / (f - s) * 100));
+            if (f > s) timeFrac = Math.max(0, Math.min(1, (now - s) / (f - s)));
           }
+          // Current SP includes the baseline SP already trained for the level.
+          const currentSP = Math.round(trainStartSP + (endSP - trainStartSP) * timeFrac);
+          const barPct    = endSP > 0 ? (currentSP / endSP) * 100 : 0;
           const remaining = current.finish_date
             ? Math.max(0, new Date(current.finish_date).getTime() - now)
             : null;
@@ -1969,10 +1996,10 @@
                 </div>
               </div>
               <div style="height:6px;background:#1a1e2e;border-radius:3px;overflow:hidden">
-                <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
+                <div style="height:100%;background:#38bdf8;width:${barPct.toFixed(1)}%"></div>
               </div>
-              <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem;text-align:right">
-                ${pct.toFixed(1)}% complete
+              <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
+                ${fmtNum(currentSP)} / ${fmtNum(endSP)} SP
               </div>
             </div>`;
         })()
