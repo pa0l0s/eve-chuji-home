@@ -887,8 +887,9 @@
     <div id="view-admin" class="hidden">
       <div id="admin-error" class="banner"></div>
       <div class="page-title">Administration</div>
-      <div id="admin-caches" class="contract-pane" style="margin-bottom:1.5rem"></div>
-      <div id="admin-content" class="contract-pane"></div>
+      <div id="admin-caches"   class="contract-pane" style="margin-bottom:1.5rem"></div>
+      <div id="admin-projects" class="contract-pane" style="margin-bottom:1.5rem"></div>
+      <div id="admin-content"  class="contract-pane"></div>
     </div>
 
     <!-- Member view -->
@@ -1651,6 +1652,10 @@
       : warn === 'yellow'
         ? '<span class="badge badge-orange" style="margin-left:0.4rem">Warning</span>'
         : '';
+    const fixedPriceBadge = p.price_excluded
+      ? '<span class="badge badge-muted" style="margin-left:0.4rem"
+              title="Exempt from market price comparison (NPC/fixed price)">Fixed Price</span>'
+      : '';
     const reasonsBlock = (p.warn_reasons && p.warn_reasons.length)
       ? `<div style="margin-top:0.4rem;font-size:0.7rem;color:${warn === 'red' ? '#f87171' : '#fb923c'}">
            ${p.warn_reasons.map(escHtml).join(' · ')}
@@ -1678,7 +1683,7 @@
       <div class="${cardClass}" onclick="openProjectContributors('${p.id}')">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:0.5rem;margin-bottom:0.75rem">
           <div style="font-size:0.95rem;font-weight:600;color:#f8fafc">${escHtml(p.name)}</div>
-          <div>${projectPriorityBadge(p.sort_priority)}${stateBadge(p.state)}${updateBadge}</div>
+          <div>${projectPriorityBadge(p.sort_priority)}${stateBadge(p.state)}${updateBadge}${fixedPriceBadge}</div>
         </div>
         <div class="progress-wrap">
           <div class="progress-label">
@@ -2250,7 +2255,102 @@
 
   async function loadAdmin() {
     hideError('admin-error');
-    await Promise.all([loadAdminUsers(), loadAdminCaches()]);
+    await Promise.all([loadAdminUsers(), loadAdminCaches(), loadAdminProjects()]);
+  }
+
+  async function loadAdminProjects() {
+    try {
+      const r = await fetch('/api/admin/projects/settings');
+      if (!r.ok) return;
+      renderAdminProjects(await r.json());
+    } catch {}
+  }
+
+  function renderAdminProjects(data) {
+    const list = data.projects || [];
+    const rows = list.map(p => `
+      <tr>
+        <td style="color:#e2e8f0">${escHtml(p.project_name)}</td>
+        <td style="text-align:center">
+          <input type="checkbox" ${p.price_excluded ? 'checked' : ''}
+                 onchange="adminToggleProjectExclusion('${escAttr(p.project_name)}', this.checked)">
+        </td>
+        <td>
+          <button class="btn-logout" onclick="adminRemoveProjectSetting('${escAttr(p.project_name)}')">Remove</button>
+        </td>
+      </tr>`).join('') || `
+      <tr><td colspan="3" style="color:#475569;text-align:center;padding:0.75rem 0;font-style:italic">
+        No project settings. Add a project name below.
+      </td></tr>`;
+    document.getElementById('admin-projects').innerHTML = `
+      <div class="card full">
+        <div class="card-title">Project Price Exclusions
+          <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.price_excluded).length} excluded</span>
+        </div>
+        <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.75rem">
+          Projects listed here can be exempted from the Jita 4-4 price-difference warnings
+          (yellow / red frames). Useful for items with fixed NPC prices or non-market rewards.
+        </p>
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
+          <input type="text" id="admin-proj-add" placeholder="Project name (e.g. Compressed Gneiss)"
+                 style="flex:1;background:#252a3d;border:1px solid #2d3348;color:#e2e8f0;
+                        padding:0.4rem 0.6rem;border-radius:6px;font-size:0.8rem;font-family:inherit"
+                 onkeydown="if(event.key==='Enter') adminAddProjectExclusion()">
+          <button class="btn-action" onclick="adminAddProjectExclusion()">Add</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Project Name</th>
+            <th style="text-align:center;width:120px">Price Excluded</th>
+            <th style="width:100px"></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function adminAddProjectExclusion() {
+    const input = document.getElementById('admin-proj-add');
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      const r = await fetch('/api/admin/projects/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, excluded: true }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showError('admin-error', 'Add failed: ' + (d.detail || r.status));
+        return;
+      }
+      input.value = '';
+      loadAdminProjects();
+    } catch { showError('admin-error', 'Network error.'); }
+  }
+
+  async function adminToggleProjectExclusion(name, excluded) {
+    try {
+      const r = await fetch('/api/admin/projects/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, excluded }),
+      });
+      if (!r.ok) showError('admin-error', 'Toggle failed.');
+    } catch { showError('admin-error', 'Network error.'); }
+  }
+
+  async function adminRemoveProjectSetting(name) {
+    if (!confirm(`Remove "${name}" from the exclusion list entirely?`)) return;
+    try {
+      const r = await fetch('/api/admin/projects/settings/' + encodeURIComponent(name),
+                             { method: 'DELETE' });
+      if (!r.ok) {
+        showError('admin-error', `Remove failed (${r.status})`);
+        return;
+      }
+      loadAdminProjects();
+    } catch { showError('admin-error', 'Network error.'); }
   }
 
   async function loadAdminUsers() {

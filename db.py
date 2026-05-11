@@ -76,6 +76,31 @@ async def init_db():
                 PRIMARY KEY (boss_character_id, member_character_id)
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS project_settings (
+                project_name   TEXT PRIMARY KEY,
+                price_excluded INTEGER DEFAULT 0,
+                updated_at     REAL NOT NULL
+            )
+        """)
+        # One-time seed of NPC-priced project names — only when table is empty,
+        # so admin edits stick across restarts.
+        async with db.execute("SELECT COUNT(*) FROM project_settings") as cur:
+            row = await cur.fetchone()
+            if row and row[0] == 0:
+                now = time.time()
+                defaults = (
+                    "Neural Network Analyzer",
+                    "Ancient Coordinates Database",
+                    "Sleeper Data Library",
+                    "Sleeper Drone AI Nexus",
+                    "Triglavian Survey Database",
+                    "Compressed Gneiss",
+                )
+                await db.executemany(
+                    "INSERT INTO project_settings (project_name, price_excluded, updated_at) VALUES (?, 1, ?)",
+                    [(n, now) for n in defaults],
+                )
         await db.commit()
 
 
@@ -204,6 +229,43 @@ async def cache_structure_name(structure_id: int, name: str,
                 owner_id  = COALESCE(excluded.owner_id,  structure_cache.owner_id),
                 cached_at = excluded.cached_at
         """, (structure_id, name, type_id, system_id, owner_id, time.time()))
+        await db.commit()
+
+
+async def list_excluded_projects() -> set[str]:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT project_name FROM project_settings WHERE price_excluded = 1"
+        ) as cur:
+            return {r[0] for r in await cur.fetchall()}
+
+
+async def list_project_settings() -> list[dict]:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT project_name, price_excluded, updated_at "
+            "FROM project_settings ORDER BY project_name"
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def set_project_price_excluded(name: str, excluded: bool):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            """INSERT INTO project_settings (project_name, price_excluded, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(project_name) DO UPDATE SET
+                 price_excluded = excluded.price_excluded,
+                 updated_at     = excluded.updated_at""",
+            (name, 1 if excluded else 0, time.time()))
+        await db.commit()
+
+
+async def delete_project_setting(name: str):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            "DELETE FROM project_settings WHERE project_name = ?", (name,))
         await db.commit()
 
 

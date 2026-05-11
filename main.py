@@ -421,6 +421,27 @@ async def admin_unban(character_id: int, _admin: int = Depends(require_admin)):
     return {"ok": True}
 
 
+@app.get("/api/admin/projects/settings")
+async def admin_project_settings(_admin: int = Depends(require_admin)):
+    return {"projects": await database.list_project_settings()}
+
+
+@app.post("/api/admin/projects/settings")
+async def admin_set_project_setting(body: dict, _admin: int = Depends(require_admin)):
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name required")
+    excluded = bool(body.get("excluded", True))
+    await database.set_project_price_excluded(name, excluded)
+    return {"ok": True}
+
+
+@app.delete("/api/admin/projects/settings/{name}")
+async def admin_delete_project_setting(name: str, _admin: int = Depends(require_admin)):
+    await database.delete_project_setting(name)
+    return {"ok": True}
+
+
 # Friendly cache names → DB table or sentinel.
 _CACHE_MAP = {
     "structures": "structure_cache",
@@ -587,8 +608,9 @@ async def projects(session: str | None = Cookie(None)):
         except Exception as e:
             print(f"Market enrichment failed for project {p.get('name')!r}: {e}")
 
+    excluded_names = await database.list_excluded_projects()
     for p in active + closed:
-        _compute_project_warn(p)
+        _compute_project_warn(p, excluded_names)
         p["sort_priority"] = _project_priority(p)
 
     return {
@@ -619,8 +641,9 @@ PROJECT_PRICE_YELLOW_RATIO  = 0.075  # >7.5% off Jita target → yellow frame
 # (PRICE_DIFF_THRESHOLD imported from esi.py, default 0.15 → red)
 
 
-def _compute_project_warn(p: dict) -> None:
-    """Assigns p['warn_level'] ∈ {'red','yellow',None} and p['warn_reasons']."""
+def _compute_project_warn(p: dict, price_excluded_names: set[str]) -> None:
+    """Assigns p['warn_level'] ∈ {'red','yellow',None}, p['warn_reasons'],
+    and p['price_excluded'] (bool)."""
     reasons: list[str] = []
     is_red = is_yellow = False
 
@@ -636,8 +659,11 @@ def _compute_project_warn(p: dict) -> None:
             is_yellow = True
             reasons.append(f"{pct * 100:.1f}% complete")
 
+    price_excluded = (p.get("name") or "") in price_excluded_names
+    p["price_excluded"] = price_excluded
+
     market = p.get("market")
-    if market and market.get("diff_ratio") is not None:
+    if market and market.get("diff_ratio") is not None and not price_excluded:
         diff = market["diff_ratio"]
         if diff > PRICE_DIFF_THRESHOLD:
             is_red = True
