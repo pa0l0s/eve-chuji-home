@@ -64,6 +64,18 @@ async def init_db():
                 cached_at       REAL    NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS fleet_positions (
+                boss_character_id   INTEGER NOT NULL,
+                member_character_id INTEGER NOT NULL,
+                member_name         TEXT,
+                wing_name           TEXT,
+                squad_name          TEXT,
+                role                TEXT NOT NULL,
+                saved_at            REAL NOT NULL,
+                PRIMARY KEY (boss_character_id, member_character_id)
+            )
+        """)
         await db.commit()
 
 
@@ -193,6 +205,36 @@ async def cache_structure_name(structure_id: int, name: str,
                 cached_at = excluded.cached_at
         """, (structure_id, name, type_id, system_id, owner_id, time.time()))
         await db.commit()
+
+
+async def save_fleet_positions(boss_id: int, members: list[dict]):
+    """Replace this boss's saved positions atomically with the supplied list.
+    Each entry: {member_character_id, member_name, wing_name, squad_name, role}."""
+    now = time.time()
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute("DELETE FROM fleet_positions WHERE boss_character_id = ?", (boss_id,))
+        await db.executemany(
+            """INSERT INTO fleet_positions
+               (boss_character_id, member_character_id, member_name,
+                wing_name, squad_name, role, saved_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [(boss_id, m["member_character_id"], m.get("member_name"),
+              m.get("wing_name"), m.get("squad_name"), m["role"], now)
+             for m in members],
+        )
+        await db.commit()
+
+
+async def load_fleet_positions(boss_id: int) -> list[dict]:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT member_character_id, member_name, wing_name, squad_name,
+                      role, saved_at
+               FROM fleet_positions WHERE boss_character_id = ?""",
+            (boss_id,),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
 
 _CACHE_TABLES = ("structure_cache", "type_cache", "system_cache", "janice_cache")

@@ -96,6 +96,56 @@ async def get_skills(character_id: int, access_token: str) -> dict:
         return r.json()
 
 
+async def get_character_fleet(character_id: int, access_token: str) -> dict | None:
+    """Returns {fleet_id, fleet_boss_id, role, squad_id, wing_id} or None if not in fleet."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/fleet/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_fleet_members(fleet_id: int, access_token: str) -> list:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/fleets/{fleet_id}/members/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_fleet_wings(fleet_id: int, access_token: str) -> list:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/fleets/{fleet_id}/wings/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def move_fleet_member(fleet_id: int, member_id: int, role: str,
+                            wing_id: int | None, squad_id: int | None,
+                            access_token: str) -> None:
+    body = {"role": role}
+    if role in ("wing_commander", "squad_commander", "squad_member") and wing_id is not None:
+        body["wing_id"] = wing_id
+    if role in ("squad_commander", "squad_member") and squad_id is not None:
+        body["squad_id"] = squad_id
+    async with httpx.AsyncClient() as client:
+        r = await client.put(
+            f"{ESI_BASE}/fleets/{fleet_id}/members/{member_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json=body,
+        )
+        r.raise_for_status()
+
+
 async def get_character_attributes(character_id: int, access_token: str) -> dict:
     async with httpx.AsyncClient() as client:
         r = await client.get(

@@ -20,7 +20,8 @@ from esi import (
     get_valid_token, get_character, get_wallet, get_skills,
     get_character_attributes, get_character_skillqueue,
     get_character_location, get_character_online, get_character_ship,
-    get_character_contracts,
+    get_character_contracts, get_character_fleet,
+    get_fleet_members, get_fleet_wings, move_fleet_member,
     get_corp_contracts, get_corp_projects, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
@@ -164,6 +165,185 @@ async def me(session: str | None = Cookie(None)):
         "corporation_id": row["corporation_id"],
         "is_admin": is_admin(character_id),
     }
+
+
+def _build_fleet_tree(members: list, wings: list, names: dict) -> dict:
+    """Combine /fleets/{id}/members and /fleets/{id}/wings into a tree."""
+    def m_summary(m):
+        return {
+            "character_id": m["character_id"],
+            "character_name": names.get(m["character_id"], f"Char {m['character_id']}"),
+            "ship_type_id": m.get("ship_type_id"),
+            "solar_system_id": m.get("solar_system_id"),
+            "role": m.get("role"),
+        }
+
+    fc = next((m for m in members if m.get("role") == "fleet_commander"), None)
+    wings_out = []
+    for w in wings:
+        wc = next((m for m in members
+                   if m.get("role") == "wing_commander" and m.get("wing_id") == w["id"]),
+                  None)
+        squads = []
+        for sq in w.get("squads", []):
+            sc = next((m for m in members
+                       if m.get("role") == "squad_commander"
+                       and m.get("wing_id") == w["id"]
+                       and m.get("squad_id") == sq["id"]),
+                      None)
+            sq_members = [m_summary(m) for m in members
+                          if m.get("role") == "squad_member"
+                          and m.get("wing_id") == w["id"]
+                          and m.get("squad_id") == sq["id"]]
+            squads.append({
+                "id": sq["id"], "name": sq["name"],
+                "commander": m_summary(sc) if sc else None,
+                "members": sq_members,
+            })
+        wings_out.append({
+            "id": w["id"], "name": w["name"],
+            "commander": m_summary(wc) if wc else None,
+            "squads": squads,
+        })
+    return {
+        "commander": m_summary(fc) if fc else None,
+        "wings": wings_out,
+    }
+
+
+@app.get("/api/fleet/current")
+async def fleet_current(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    access_token = await get_valid_token(character_id)
+
+    try:
+        fleet_info = await get_character_fleet(character_id, access_token)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+
+    if not fleet_info:
+        return {"in_fleet": False}
+
+    is_boss = fleet_info.get("fleet_boss_id") == character_id
+    response = {
+        "in_fleet": True,
+        "fleet_id": fleet_info["fleet_id"],
+        "fleet_boss_id": fleet_info.get("fleet_boss_id"),
+        "is_boss": is_boss,
+        "your_role": fleet_info.get("role"),
+    }
+
+    if not is_boss:
+        return response
+
+    # Boss can fetch full fleet contents.
+    try:
+        members, wings = await asyncio.gather(
+            get_fleet_members(fleet_info["fleet_id"], access_token),
+            get_fleet_wings(fleet_info["fleet_id"], access_token),
+        )
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            response["error"] = "Boss-only data unavailable (403)"
+            return response
+        raise HTTPException(status_code=502, detail=f"ESI fleet error: {e.response.status_code}")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+
+    names = await resolve_names([m["character_id"] for m in members])
+    response["tree"] = _build_fleet_tree(members, wings, names)
+    response["saved"] = await database.load_fleet_positions(character_id)
+    return response
+
+
+@app.post("/api/fleet/save")
+async def fleet_save(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    access_token = await get_valid_token(character_id)
+
+    fleet_info = await get_character_fleet(character_id, access_token)
+    if not fleet_info:
+        raise HTTPException(status_code=400, detail="Not in a fleet")
+    if fleet_info.get("fleet_boss_id") != character_id:
+        raise HTTPException(status_code=403, detail="Only the fleet boss can save")
+
+    try:
+        members, wings = await asyncio.gather(
+            get_fleet_members(fleet_info["fleet_id"], access_token),
+            get_fleet_wings(fleet_info["fleet_id"], access_token),
+        )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"ESI error: {e}")
+
+    wing_by_id   = {w["id"]: w["name"] for w in wings}
+    squad_by_ids = {(w["id"], s["id"]): s["name"]
+                    for w in wings for s in w.get("squads", [])}
+    names = await resolve_names([m["character_id"] for m in members])
+
+    rows = []
+    for m in members:
+        rows.append({
+            "member_character_id": m["character_id"],
+            "member_name":         names.get(m["character_id"]),
+            "wing_name":           wing_by_id.get(m.get("wing_id")),
+            "squad_name":          squad_by_ids.get((m.get("wing_id"), m.get("squad_id"))),
+            "role":                m.get("role"),
+        })
+    await database.save_fleet_positions(character_id, rows)
+    return {"ok": True, "saved": len(rows)}
+
+
+@app.post("/api/fleet/load")
+async def fleet_load(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    access_token = await get_valid_token(character_id)
+
+    fleet_info = await get_character_fleet(character_id, access_token)
+    if not fleet_info:
+        raise HTTPException(status_code=400, detail="Not in a fleet")
+    if fleet_info.get("fleet_boss_id") != character_id:
+        raise HTTPException(status_code=403, detail="Only the fleet boss can load")
+
+    saved = await database.load_fleet_positions(character_id)
+    if not saved:
+        raise HTTPException(status_code=400, detail="No saved positions to load")
+
+    try:
+        members, wings = await asyncio.gather(
+            get_fleet_members(fleet_info["fleet_id"], access_token),
+            get_fleet_wings(fleet_info["fleet_id"], access_token),
+        )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"ESI error: {e}")
+
+    member_ids = {m["character_id"] for m in members}
+    wing_by_name = {w["name"]: w for w in wings}
+
+    moved, skipped = [], []
+    for s in saved:
+        if s["member_character_id"] not in member_ids:
+            skipped.append({"member_id": s["member_character_id"],
+                            "name": s.get("member_name"), "reason": "not in fleet"})
+            continue
+        role = s["role"]
+        wing = wing_by_name.get(s.get("wing_name") or "")
+        squad = None
+        if wing and s.get("squad_name"):
+            squad = next((sq for sq in wing.get("squads", [])
+                          if sq["name"] == s["squad_name"]), None)
+        try:
+            await move_fleet_member(
+                fleet_info["fleet_id"], s["member_character_id"], role,
+                wing["id"] if wing else None,
+                squad["id"] if squad else None,
+                access_token,
+            )
+            moved.append({"member_id": s["member_character_id"],
+                          "name": s.get("member_name"), "role": role})
+        except httpx.HTTPError as e:
+            skipped.append({"member_id": s["member_character_id"],
+                            "name": s.get("member_name"), "reason": str(e)[:80]})
+    return {"ok": True, "moved": moved, "skipped": skipped}
 
 
 @app.get("/api/admin/users")

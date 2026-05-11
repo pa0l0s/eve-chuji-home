@@ -1,0 +1,25 @@
+1. Workflow
+a. Saving fleet member assigned position in fleet
+- User wo is fleet boos logs in to page using EVE esi
+- On fleet page user clicks Save button
+- System saves fleet members assigned fleet position ( name of wing or squad or fleet noed position (-1)) using eve api
+b. Load fleet member assigned position in fleet
+- User wo is fleet boos logs in to page using EVE esi
+- On fleet page user clicks Load button
+- System moves fleet members to theyer saved position in fleet by squad name or wing name or fleet position (-1)
+
+c. If user have saved fleet user asigment it should be displayed on fleet page if possible in form of fleet tree
+Fleet				-	Fleet commander
+	- Wing1			-	Wing1 commander
+		- Squad1	-	Squad1 commander
+					-	Squad1 member
+		- Squad2	-	Squad2 commander
+	- Wing2			...
+		- Squad3
+		...
+
+2. Eve Online API to use:
+https://developers.eveonline.com/api-explorer#/operations/GetCharactersCharacterIdFleet   to get fleet info (id)
+https://developers.eveonline.com/api-explorer#/operations/GetFleetsFleetIdMembers  to get list of fleet members
+https://developers.eveonline.com/api-explorer#/operations/PutFleetsFleetIdMembersMemberId  to move member to saved fleet position
+https://developers.eveonline.com/api-explorer#/operations/GetFleetsFleetIdWings   to grt wings and squads names to store
