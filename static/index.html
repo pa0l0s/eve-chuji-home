@@ -730,7 +730,15 @@
     <!-- Contracts view -->
     <div id="view-contracts">
       <div id="contracts-error" class="banner"></div>
-      <div class="page-title">Corporation Contracts</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  gap:1rem;max-width:1200px;margin:0 auto 1.5rem auto">
+        <div class="page-title" style="margin:0">Corporation Contracts</div>
+        <div style="display:flex;align-items:center;gap:0.6rem">
+          <span id="contracts-updated" style="font-size:0.7rem;color:#475569"
+                title="ESI caches this endpoint for ~5 minutes; refresh re-asks but may return same data."></span>
+          <button class="btn-action" onclick="loadContracts(true)">Refresh</button>
+        </div>
+      </div>
       <div class="tab-strip">
         <button class="tab-btn active" id="tab-hauling" onclick="showContractTab('hauling')">
           Hauling <span class="tab-count" id="count-hauling">0</span>
@@ -917,10 +925,15 @@
 
   // ── Contracts ─────────────────────────────────────────────────────────────
 
-  async function loadContracts() {
+  let contractsLastUpdated = null;
+  let contractsUpdatedTicker = null;
+
+  async function loadContracts(force) {
     if (contractsTimer) clearTimeout(contractsTimer);
     try {
-      const r = await fetch('/api/contracts');
+      const url = force ? '/api/contracts?t=' + Date.now() : '/api/contracts';
+      const opts = force ? { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } } : {};
+      const r = await fetch(url, opts);
       if (!r.ok) {
         showError('contracts-error', r.status === 403
           ? 'Insufficient corporation roles to view contracts.'
@@ -929,10 +942,24 @@
       }
       hideError('contracts-error');
       renderContracts(await r.json());
+      contractsLastUpdated = Date.now();
+      updateContractsUpdatedLabel();
+      if (!contractsUpdatedTicker) {
+        contractsUpdatedTicker = setInterval(updateContractsUpdatedLabel, 10000);
+      }
     } catch {
       showError('contracts-error', 'Network error — could not load contracts.');
     }
-    contractsTimer = setTimeout(loadContracts, 120000);
+    contractsTimer = setTimeout(loadContracts, 60000);
+  }
+
+  function updateContractsUpdatedLabel() {
+    const el = document.getElementById('contracts-updated');
+    if (!el || !contractsLastUpdated) return;
+    const sec = Math.floor((Date.now() - contractsLastUpdated) / 1000);
+    el.textContent = sec < 60
+      ? `Updated ${sec}s ago`
+      : `Updated ${Math.floor(sec / 60)}m ${sec % 60}s ago`;
   }
 
   function showContractTab(tab) {
