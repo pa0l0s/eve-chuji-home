@@ -23,6 +23,12 @@ async def init_db():
                 corporation_id INTEGER NOT NULL
             )
         """)
+        for col in ("created_at REAL", "last_login_at REAL",
+                    "last_seen_at REAL", "banned INTEGER DEFAULT 0"):
+            try:
+                await db.execute(f"ALTER TABLE tokens ADD COLUMN {col}")
+            except aiosqlite.OperationalError:
+                pass
         await db.execute("""
             CREATE TABLE IF NOT EXISTS janice_cache (
                 item_id   INTEGER PRIMARY KEY,
@@ -108,6 +114,56 @@ async def get_janice_cache(item_id: int) -> dict | None:
         async with db.execute("SELECT * FROM janice_cache WHERE item_id = ?", (item_id,)) as cur:
             row = await cur.fetchone()
             return dict(row) if row else None
+
+
+async def update_last_login(character_id: int):
+    now = time.time()
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            "UPDATE tokens SET last_login_at = ?, "
+            "created_at = COALESCE(created_at, ?) WHERE character_id = ?",
+            (now, now, character_id),
+        )
+        await db.commit()
+
+
+async def update_last_seen(character_id: int):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            "UPDATE tokens SET last_seen_at = ? WHERE character_id = ?",
+            (time.time(), character_id),
+        )
+        await db.commit()
+
+
+async def set_banned(character_id: int, banned: bool):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            "UPDATE tokens SET banned = ? WHERE character_id = ?",
+            (1 if banned else 0, character_id),
+        )
+        await db.commit()
+
+
+async def is_banned(character_id: int) -> bool:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT banned FROM tokens WHERE character_id = ?", (character_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            return bool(row and row[0])
+
+
+async def list_all_users() -> list[dict]:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT character_id, character_name, corporation_id,
+                   created_at, last_login_at, last_seen_at, banned
+            FROM tokens
+            ORDER BY last_seen_at DESC, character_name
+        """) as cur:
+            return [dict(r) for r in await cur.fetchall()]
 
 
 async def get_cached_structure(structure_id: int) -> dict | None:

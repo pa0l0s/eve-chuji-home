@@ -630,6 +630,7 @@
       <button class="nav-btn" id="btn-projects" onclick="showView('projects')">Projects</button>
       <button class="nav-btn" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
+      <button class="nav-btn hidden" id="btn-admin" onclick="showView('admin')">Admin</button>
     </div>
     <div class="nav-right">
       <div class="tq-status" id="tq-status" title="EVE Tranquility status">
@@ -703,6 +704,13 @@
       <div id="pane-poses" class="contract-pane hidden"></div>
     </div>
 
+    <!-- Admin view -->
+    <div id="view-admin" class="hidden">
+      <div id="admin-error" class="banner"></div>
+      <div class="page-title">User Administration</div>
+      <div id="admin-content" class="contract-pane"></div>
+    </div>
+
     <!-- Member view -->
     <div id="view-member" class="hidden">
       <div id="member-error" class="banner"></div>
@@ -734,6 +742,9 @@
       document.getElementById('nav-portrait').src =
         `https://images.evetech.net/characters/${currentUser.character_id}/portrait?size=64`;
       document.getElementById('nav-name').textContent = currentUser.character_name;
+      if (currentUser.is_admin) {
+        document.getElementById('btn-admin').classList.remove('hidden');
+      }
       show('view-app');
       showView('contracts');
       pollServerStatus();
@@ -777,7 +788,7 @@
   }
 
   function showView(view) {
-    ['contracts', 'projects', 'structures', 'member'].forEach(v => {
+    ['contracts', 'projects', 'structures', 'member', 'admin'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
@@ -785,6 +796,7 @@
     if (view === 'projects') loadProjects();
     if (view === 'structures') loadStructures();
     if (view === 'member') loadMember();
+    if (view === 'admin') loadAdmin();
   }
 
   // ── Contracts ─────────────────────────────────────────────────────────────
@@ -1535,6 +1547,83 @@
       Expired: 'badge-orange',
     }[state] || 'badge-muted';
     return `<span class="badge ${cls}">${escHtml(state || '')}</span>`;
+  }
+
+  // ── Admin ─────────────────────────────────────────────────────────────────
+
+  async function loadAdmin() {
+    try {
+      const r = await fetch('/api/admin/users');
+      if (!r.ok) {
+        showError('admin-error',
+          r.status === 403 ? 'Admin access required.' : `Failed to load (${r.status})`);
+        return;
+      }
+      hideError('admin-error');
+      renderAdmin(await r.json());
+    } catch {
+      showError('admin-error', 'Network error — could not load users.');
+    }
+  }
+
+  function renderAdmin(data) {
+    const users = data.users || [];
+    if (!users.length) {
+      document.getElementById('admin-content').innerHTML =
+        '<p class="contract-empty">No users yet.</p>';
+      return;
+    }
+    const rows = users.map(u => {
+      const banned = !!u.banned;
+      const created  = u.created_at    ? new Date(u.created_at * 1000).toLocaleDateString() : '–';
+      const login    = u.last_login_at ? new Date(u.last_login_at * 1000).toLocaleString() : '–';
+      const seen     = u.last_seen_at  ? new Date(u.last_seen_at * 1000).toLocaleString() : '–';
+      const statusBadge = banned
+        ? '<span class="badge badge-red">Banned</span>'
+        : '<span class="badge badge-green">Active</span>';
+      const actionBtn = banned
+        ? `<button class="btn-logout" onclick="adminToggleBan(${u.character_id}, 'unban')">Unban</button>`
+        : `<button class="btn-logout" onclick="adminToggleBan(${u.character_id}, 'ban')">Ban</button>`;
+      return `
+        <tr>
+          <td style="color:#e2e8f0;display:flex;align-items:center;gap:0.5rem">
+            <img src="https://images.evetech.net/characters/${u.character_id}/portrait?size=64"
+                 style="width:28px;height:28px;border-radius:50%;background:#252a3d">
+            <span>${escHtml(u.character_name || 'Unknown')}</span>
+            ${characterZkillLink(u.character_id)}
+          </td>
+          <td style="color:#64748b;font-size:0.75rem;font-variant-numeric:tabular-nums">${u.character_id}</td>
+          <td style="color:#94a3b8">${created}</td>
+          <td style="color:#94a3b8">${login}</td>
+          <td style="color:#94a3b8">${seen}</td>
+          <td>${statusBadge}</td>
+          <td>${actionBtn}</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('admin-content').innerHTML = `
+      <div class="card full">
+        <table>
+          <thead><tr>
+            <th>Character</th><th>ID</th><th>First Login</th><th>Last Login</th>
+            <th>Last Seen</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function adminToggleBan(characterId, action) {
+    if (!confirm(`${action === 'ban' ? 'Ban' : 'Unban'} character ${characterId}?`)) return;
+    try {
+      const r = await fetch(`/api/admin/users/${characterId}/${action}`, { method: 'POST' });
+      if (!r.ok) {
+        showError('admin-error', `Action failed (${r.status})`);
+        return;
+      }
+      loadAdmin(); // refresh
+    } catch {
+      showError('admin-error', 'Network error during action.');
+    }
   }
 
   // ── Member ────────────────────────────────────────────────────────────────

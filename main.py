@@ -6,12 +6,16 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 
 import httpx
-from fastapi import FastAPI, Cookie, HTTPException, Request
+from fastapi import FastAPI, Cookie, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import db as database
-from auth import build_login_url, exchange_code, verify_token, make_session_cookie, read_session_cookie
+from auth import (
+    build_login_url, exchange_code, verify_token,
+    make_session_cookie, read_session_cookie,
+    is_admin,
+)
 from esi import (
     get_valid_token, get_character, get_wallet, get_skills,
     get_character_attributes, get_character_skillqueue,
@@ -48,6 +52,15 @@ async def get_current_character_id(session: str | None = Cookie(None)) -> int:
     character_id = read_session_cookie(session)
     if not character_id:
         raise HTTPException(status_code=401, detail="Invalid session")
+    # Admins are exempt from ban (so they can't lock themselves out).
+    if not is_admin(character_id) and await database.is_banned(character_id):
+        raise HTTPException(status_code=403, detail="Account banned")
+    return character_id
+
+
+async def require_admin(character_id: int = Depends(get_current_character_id)) -> int:
+    if not is_admin(character_id):
+        raise HTTPException(status_code=403, detail="Admin access required")
     return character_id
 
 
@@ -130,6 +143,7 @@ async def callback(code: str, state: str, request: Request):
         expires_at=time.time() + tokens.get("expires_in", 1200),
         corporation_id=corporation_id,
     )
+    await database.update_last_login(character_id)
 
     resp = RedirectResponse(url="/")
     resp.set_cookie("session", make_session_cookie(character_id), httponly=True, samesite="lax")
@@ -143,11 +157,30 @@ async def me(session: str | None = Cookie(None)):
     row = await database.get_token(character_id)
     if not row:
         raise HTTPException(status_code=401, detail="Session expired")
+    await database.update_last_seen(character_id)
     return {
         "character_id": row["character_id"],
         "character_name": row["character_name"],
         "corporation_id": row["corporation_id"],
+        "is_admin": is_admin(character_id),
     }
+
+
+@app.get("/api/admin/users")
+async def admin_list_users(_admin: int = Depends(require_admin)):
+    return {"users": await database.list_all_users()}
+
+
+@app.post("/api/admin/users/{character_id}/ban")
+async def admin_ban(character_id: int, _admin: int = Depends(require_admin)):
+    await database.set_banned(character_id, True)
+    return {"ok": True}
+
+
+@app.post("/api/admin/users/{character_id}/unban")
+async def admin_unban(character_id: int, _admin: int = Depends(require_admin)):
+    await database.set_banned(character_id, False)
+    return {"ok": True}
 
 
 @app.get("/api/auth/logout")

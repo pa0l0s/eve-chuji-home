@@ -28,6 +28,15 @@ SCOPES = " ".join([
 ])
 
 
+def get_admin_character_ids() -> set[int]:
+    raw = os.getenv("ADMIN_CHARACTER_IDS", "")
+    return {int(s.strip()) for s in raw.split(",") if s.strip().isdigit()}
+
+
+def is_admin(character_id: int) -> bool:
+    return character_id in get_admin_character_ids()
+
+
 def _signer() -> URLSafeSerializer:
     secret = os.getenv("SECRET_KEY")
     if not secret:
