@@ -1653,8 +1653,7 @@
         ? '<span class="badge badge-orange" style="margin-left:0.4rem">Warning</span>'
         : '';
     const fixedPriceBadge = p.price_excluded
-      ? '<span class="badge badge-muted" style="margin-left:0.4rem"
-              title="Exempt from market price comparison (NPC/fixed price)">Fixed Price</span>'
+      ? '<span class="badge badge-muted" style="margin-left:0.4rem" title="Exempt from market price comparison (NPC/fixed price)">Fixed Price</span>'
       : '';
     const reasonsBlock = (p.warn_reasons && p.warn_reasons.length)
       ? `<div style="margin-top:0.4rem;font-size:0.7rem;color:${warn === 'red' ? '#f87171' : '#fb923c'}">
