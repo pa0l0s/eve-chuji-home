@@ -119,6 +119,17 @@ async def get_fleet_members(fleet_id: int, access_token: str) -> list:
         return r.json()
 
 
+async def get_fleet_info(fleet_id: int, access_token: str) -> dict:
+    """Returns {is_free_move, is_registered, is_voice_enabled, motd}."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/fleets/{fleet_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 async def get_fleet_wings(fleet_id: int, access_token: str) -> list:
     async with httpx.AsyncClient() as client:
         r = await client.get(

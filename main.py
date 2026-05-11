@@ -21,7 +21,7 @@ from esi import (
     get_character_attributes, get_character_skillqueue,
     get_character_location, get_character_online, get_character_ship,
     get_character_contracts, get_character_fleet,
-    get_fleet_members, get_fleet_wings, move_fleet_member,
+    get_fleet_info, get_fleet_members, get_fleet_wings, move_fleet_member,
     get_corp_contracts, get_corp_projects, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
@@ -238,9 +238,10 @@ async def fleet_current(session: str | None = Cookie(None)):
 
     # Boss can fetch full fleet contents.
     try:
-        members, wings = await asyncio.gather(
+        members, wings, fleet_meta = await asyncio.gather(
             get_fleet_members(fleet_info["fleet_id"], access_token),
             get_fleet_wings(fleet_info["fleet_id"], access_token),
+            get_fleet_info(fleet_info["fleet_id"], access_token),
         )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 403:
@@ -251,8 +252,15 @@ async def fleet_current(session: str | None = Cookie(None)):
         raise HTTPException(status_code=502, detail="ESI unavailable")
 
     names = await resolve_names([m["character_id"] for m in members])
+    saved = await database.load_fleet_positions(character_id)
     response["tree"] = _build_fleet_tree(members, wings, names)
-    response["saved"] = await database.load_fleet_positions(character_id)
+    response["saved"] = saved
+    response["info"] = {
+        **fleet_meta,
+        "member_count": len(members),
+        "wing_count":   len(wings),
+        "saved_count":  len(saved),
+    }
     return response
 
 
