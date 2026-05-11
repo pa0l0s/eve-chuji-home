@@ -654,6 +654,26 @@
     .match-dot.mismatch { background: #fb923c; }
     .match-dot.empty    { background: #475569; }
 
+    /* Drag / drop affordances */
+    .fleet-cmp td.col-saved[data-member-id] { cursor: grab; }
+    .fleet-cmp td.col-saved[data-member-id]:active { cursor: grabbing; }
+    .fleet-cmp tr.drop-target {
+      outline: 2px dashed #38bdf8;
+      outline-offset: -2px;
+    }
+    .fleet-cmp tr.drop-target td { background: rgba(56, 189, 248, 0.06) !important; }
+    .ft-cell-btn {
+      background: #252a3d; border: 1px solid #2d3348;
+      color: #64748b; cursor: pointer;
+      font-size: 0.7rem; padding: 0.05rem 0.4rem;
+      border-radius: 4px; margin-left: 0.4rem;
+      opacity: 0; transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+      line-height: 1.2;
+    }
+    .fleet-cmp td:hover .ft-cell-btn { opacity: 0.7; }
+    .ft-cell-btn:hover { opacity: 1 !important; color: #38bdf8; border-color: #38bdf8; }
+    .ft-cell-btn.remove:hover { color: #f87171; border-color: #f87171; }
+
     .btn-action {
       background: #0c2233; border: 1px solid #38bdf8; color: #38bdf8;
       font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
@@ -1768,6 +1788,17 @@
       </div>`;
   }
 
+  // Context globals updated while iterating the tree, used by cmpRow / memberCmpRow.
+  let cmpRowContextWing = null;
+  let cmpRowContextSquad = null;
+
+  function escAttr(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function renderFleetComparison(tree, saved) {
     // Index saved positions by role + path for quick lookup.
     const savedFC = saved.find(s => s.role === 'fleet_commander') || null;
@@ -1786,28 +1817,33 @@
 
     const rows = [];
 
-    // Fleet Commander row
+    // FC: no wing/squad context
+    cmpRowContextWing = null; cmpRowContextSquad = null;
     rows.push(cmpRow('Fleet', 'FC', tree.commander, savedFC, 0));
 
     for (const w of tree.wings) {
-      // Wing section header
       rows.push(sectionRow('section', w.name, 1));
-      // Wing Commander row
+      // WC: wing context only
+      cmpRowContextWing = w.name; cmpRowContextSquad = null;
       rows.push(cmpRow(w.name, 'WC', w.commander, savedWC.get(w.name) || null, 2));
 
       for (const sq of w.squads) {
         rows.push(sectionRow('subsection', sq.name, 2));
         const key = `${w.name}|${sq.name}`;
 
-        // Squad Commander row
+        // SC + member rows: wing + squad context
+        cmpRowContextWing = w.name; cmpRowContextSquad = sq.name;
         rows.push(cmpRow(sq.name, 'SC', sq.commander, savedSC.get(key) || null, 3));
 
-        // Squad member rows — union of current and saved.
         const curById = new Map(sq.members.map(m => [m.character_id, m]));
         const savById = new Map((savedMembers.get(key) || []).map(s => [s.member_character_id, s]));
         const ids = new Set([...curById.keys(), ...savById.keys()]);
         if (!ids.size) {
-          rows.push(`<tr><td class="indent-3 ft-empty">— empty —</td><td></td><td></td></tr>`);
+          rows.push(`<tr ${rowAttrs(w.name, sq.name, 'squad_member')}>
+                       <td class="indent-3 ft-empty">— empty —</td>
+                       <td class="col-current"></td>
+                       <td class="col-saved"></td>
+                     </tr>`);
         } else {
           for (const id of ids) {
             const cur = curById.get(id);
@@ -1818,7 +1854,7 @@
       }
     }
 
-    return `
+    const html = `
       <table class="fleet-cmp">
         <thead>
           <tr><th style="width:35%">Position</th><th>Current</th><th>Saved</th></tr>
@@ -1827,6 +1863,15 @@
           ${rows.join('')}
         </tbody>
       </table>`;
+    // After DOM is in place we attach drag handlers; renderFleet defers to next tick.
+    setTimeout(setupFleetDragDrop, 0);
+    return html;
+  }
+
+  function rowAttrs(wing_name, squad_name, role) {
+    return `data-target-wing="${escAttr(wing_name)}" `
+         + `data-target-squad="${escAttr(squad_name)}" `
+         + `data-target-role="${escAttr(role)}"`;
   }
 
   function sectionRow(cls, name, indent) {
@@ -1834,14 +1879,26 @@
   }
 
   function cmpRow(posName, role, current, saved, indent) {
-    const curName = current?.character_name || null;
-    const savName = saved?.member_name || null;
+    const apiRole = role === 'FC' ? 'fleet_commander'
+                   : role === 'WC' ? 'wing_commander'
+                   : 'squad_commander';
+    // Determine target wing/squad based on row context — passed via posName/saved.
+    const targetWing  = (apiRole === 'fleet_commander') ? null
+                      : (saved?.wing_name || cmpRowContextWing);
+    const targetSquad = (apiRole === 'squad_commander') ? (saved?.squad_name || cmpRowContextSquad)
+                      : null;
     const matchCls = matchClass(current?.character_id, saved?.member_character_id);
     return `
-      <tr class="${matchCls}">
+      <tr class="${matchCls}" ${rowAttrs(targetWing, targetSquad, apiRole)}>
         <td class="indent-${indent}"><span class="ft-role">${role}</span></td>
-        <td class="col-current">${memberCell(current?.character_id, curName)}</td>
-        <td class="col-saved">${memberCell(saved?.member_character_id, savName)}</td>
+        <td class="col-current">
+          ${memberCell(current?.character_id, current?.character_name)}
+          ${saveCurrentButton(current, targetWing, targetSquad, apiRole)}
+        </td>
+        <td class="col-saved" ${savedCellAttrs(saved)}>
+          ${memberCell(saved?.member_character_id, saved?.member_name)}
+          ${removeSavedButton(saved)}
+        </td>
       </tr>`;
   }
 
@@ -1851,11 +1908,20 @@
     const savId = saved?.member_character_id;
     const savName = saved?.member_name;
     const matchCls = matchClass(curId, savId);
+    // Member rows belong to a specific squad whose name is in saved.squad_name (or current's squad).
+    const targetWing  = saved?.wing_name  || cmpRowContextWing;
+    const targetSquad = saved?.squad_name || cmpRowContextSquad;
     return `
-      <tr class="${matchCls}">
+      <tr class="${matchCls}" ${rowAttrs(targetWing, targetSquad, 'squad_member')}>
         <td class="indent-${indent}"><span class="ft-role">Member</span></td>
-        <td class="col-current">${memberCell(curId, curName)}</td>
-        <td class="col-saved">${memberCell(savId, savName)}</td>
+        <td class="col-current">
+          ${memberCell(curId, curName)}
+          ${saveCurrentButton(current, targetWing, targetSquad, 'squad_member')}
+        </td>
+        <td class="col-saved" ${savedCellAttrs(saved)}>
+          ${memberCell(savId, savName)}
+          ${removeSavedButton(saved)}
+        </td>
       </tr>`;
   }
 
@@ -1868,11 +1934,102 @@
       ${characterZkillLink(charId)}`;
   }
 
+  function savedCellAttrs(saved) {
+    if (!saved?.member_character_id) return '';
+    return `draggable="true" `
+         + `data-member-id="${saved.member_character_id}" `
+         + `data-member-name="${escAttr(saved.member_name)}"`;
+  }
+
+  function saveCurrentButton(current, wing, squad, role) {
+    if (!current?.character_id) return '';
+    return `<button class="ft-cell-btn" title="Save this position to saved layout"
+            onclick="saveCurrentMember(${current.character_id},'${escAttr(current.character_name)}',
+                                       '${escAttr(wing)}','${escAttr(squad)}','${role}')">↪</button>`;
+  }
+
+  function removeSavedButton(saved) {
+    if (!saved?.member_character_id) return '';
+    return `<button class="ft-cell-btn remove" title="Remove from saved layout"
+            onclick="removeSavedMember(${saved.member_character_id})">×</button>`;
+  }
+
   function matchClass(curId, savId) {
     if (curId && savId && curId === savId) return 'row-match';
     if (curId && savId && curId !== savId) return 'row-mismatch';
     if (!curId && !savId) return '';
     return 'row-mismatch';  // one side present, other empty
+  }
+
+  function setupFleetDragDrop() {
+    document.querySelectorAll('.fleet-cmp td.col-saved[data-member-id]').forEach(cell => {
+      cell.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('application/json', JSON.stringify({
+          memberId: cell.dataset.memberId,
+          memberName: cell.dataset.memberName || '',
+        }));
+        e.dataTransfer.effectAllowed = 'move';
+      });
+    });
+    document.querySelectorAll('.fleet-cmp tr[data-target-role]').forEach(row => {
+      row.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drop-target');
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+      row.addEventListener('drop', async e => {
+        e.preventDefault();
+        row.classList.remove('drop-target');
+        let data;
+        try { data = JSON.parse(e.dataTransfer.getData('application/json')); } catch { return; }
+        if (!data?.memberId) return;
+        await postSavedPosition(data.memberId, data.memberName,
+          row.dataset.targetWing || null,
+          row.dataset.targetSquad || null,
+          row.dataset.targetRole);
+        loadFleet();
+      });
+    });
+  }
+
+  async function postSavedPosition(memberId, memberName, wingName, squadName, role) {
+    try {
+      const r = await fetch(`/api/fleet/saved/${memberId}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          member_name: memberName || null,
+          wing_name:   wingName   || null,
+          squad_name:  squadName  || null,
+          role,
+        }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showError('fleet-error', 'Save position failed: ' + (d.detail || r.status));
+      }
+    } catch {
+      showError('fleet-error', 'Network error during save.');
+    }
+  }
+
+  async function saveCurrentMember(memberId, memberName, wingName, squadName, role) {
+    await postSavedPosition(memberId, memberName, wingName, squadName, role);
+    loadFleet();
+  }
+
+  async function removeSavedMember(memberId) {
+    if (!confirm('Remove this member from the saved layout?')) return;
+    try {
+      const r = await fetch(`/api/fleet/saved/${memberId}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showError('fleet-error', 'Remove failed: ' + (d.detail || r.status));
+        return;
+      }
+      loadFleet();
+    } catch { showError('fleet-error', 'Network error during remove.'); }
   }
 
   async function fleetSave() {

@@ -207,6 +207,53 @@ async def cache_structure_name(structure_id: int, name: str,
         await db.commit()
 
 
+async def upsert_fleet_position(boss_id: int, member_id: int, member_name: str | None,
+                                wing_name: str | None, squad_name: str | None, role: str):
+    """Save a single member's position; enforces commander exclusivity per slot."""
+    now = time.time()
+    async with aiosqlite.connect(_db_path()) as db:
+        # Only one fleet/wing/squad commander allowed per matching slot.
+        if role == "fleet_commander":
+            await db.execute(
+                "DELETE FROM fleet_positions WHERE boss_character_id = ? "
+                "AND role = 'fleet_commander' AND member_character_id != ?",
+                (boss_id, member_id))
+        elif role == "wing_commander":
+            await db.execute(
+                "DELETE FROM fleet_positions WHERE boss_character_id = ? "
+                "AND role = 'wing_commander' AND wing_name = ? "
+                "AND member_character_id != ?",
+                (boss_id, wing_name, member_id))
+        elif role == "squad_commander":
+            await db.execute(
+                "DELETE FROM fleet_positions WHERE boss_character_id = ? "
+                "AND role = 'squad_commander' AND wing_name = ? AND squad_name = ? "
+                "AND member_character_id != ?",
+                (boss_id, wing_name, squad_name, member_id))
+        await db.execute(
+            """INSERT INTO fleet_positions
+               (boss_character_id, member_character_id, member_name,
+                wing_name, squad_name, role, saved_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(boss_character_id, member_character_id) DO UPDATE SET
+                 member_name = excluded.member_name,
+                 wing_name   = excluded.wing_name,
+                 squad_name  = excluded.squad_name,
+                 role        = excluded.role,
+                 saved_at    = excluded.saved_at""",
+            (boss_id, member_id, member_name, wing_name, squad_name, role, now))
+        await db.commit()
+
+
+async def delete_fleet_position(boss_id: int, member_id: int):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            "DELETE FROM fleet_positions WHERE boss_character_id = ? "
+            "AND member_character_id = ?",
+            (boss_id, member_id))
+        await db.commit()
+
+
 async def save_fleet_positions(boss_id: int, members: list[dict]):
     """Replace this boss's saved positions atomically with the supplied list.
     Each entry: {member_character_id, member_name, wing_name, squad_name, role}."""

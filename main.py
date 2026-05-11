@@ -256,6 +256,45 @@ async def fleet_current(session: str | None = Cookie(None)):
     return response
 
 
+async def _require_fleet_boss(character_id: int) -> tuple[int, str]:
+    access_token = await get_valid_token(character_id)
+    fleet_info = await get_character_fleet(character_id, access_token)
+    if not fleet_info:
+        raise HTTPException(status_code=400, detail="Not in a fleet")
+    if fleet_info.get("fleet_boss_id") != character_id:
+        raise HTTPException(status_code=403, detail="Only the fleet boss can manage saved positions")
+    return fleet_info["fleet_id"], access_token
+
+
+@app.post("/api/fleet/saved/{member_id}")
+async def fleet_saved_upsert(member_id: int, body: dict,
+                             session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    await _require_fleet_boss(character_id)
+    role = body.get("role")
+    if role not in ("fleet_commander", "wing_commander", "squad_commander", "squad_member"):
+        raise HTTPException(status_code=400, detail="Invalid role")
+    wing_name  = body.get("wing_name") or None
+    squad_name = body.get("squad_name") or None
+    if role in ("wing_commander", "squad_commander", "squad_member") and not wing_name:
+        raise HTTPException(status_code=400, detail="wing_name required for this role")
+    if role in ("squad_commander", "squad_member") and not squad_name:
+        raise HTTPException(status_code=400, detail="squad_name required for this role")
+    await database.upsert_fleet_position(
+        character_id, member_id, body.get("member_name"),
+        wing_name, squad_name, role,
+    )
+    return {"ok": True}
+
+
+@app.delete("/api/fleet/saved/{member_id}")
+async def fleet_saved_delete(member_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    await _require_fleet_boss(character_id)
+    await database.delete_fleet_position(character_id, member_id)
+    return {"ok": True}
+
+
 @app.post("/api/fleet/save")
 async def fleet_save(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
