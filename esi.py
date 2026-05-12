@@ -383,6 +383,17 @@ async def get_location_name(location_id: int, access_token: str) -> str:
     return info["name"]
 
 
+async def get_group_info(group_id: int) -> dict | None:
+    """Public ESI; returns {group_id, name, category_id, types: [type_ids], ...} or None."""
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/universe/groups/{group_id}/")
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError:
+            return None
+
+
 async def get_type_info(type_id: int) -> dict:
     """Public ESI; returns {name, group_id}. Cached."""
     cached = await get_cached_type(type_id)

@@ -2660,6 +2660,7 @@
       ${renderFinancialsCard(m)}
       ${renderAttributesCard(m)}
       ${renderSkillQueueCard(m)}
+      ${renderSkillCoverageCard(m)}
       <div class="card full" id="contracts-card">
         <div class="card-title">Your Contracts</div>
         <div class="skeleton" style="height:60px"></div>
@@ -2954,6 +2955,101 @@
         ${currentBlock}
         ${upcomingBlock}
       </div>`;
+  }
+
+  function renderSkillCoverageCard(m) {
+    const skills = sectionData(m.skills);
+    const coverage = skills?.coverage || [];
+    if (!coverage.length) return '';
+    return `
+      <div class="card full">
+        <div class="card-title">Skills Coverage (in percent)
+          <span class="badge badge-muted" style="margin-left:0.4rem">
+            ${coverage.length} groups
+          </span>
+        </div>
+        <div style="display:flex;justify-content:center;padding:0.5rem 0">
+          ${renderSkillRadar(coverage)}
+        </div>
+      </div>`;
+  }
+
+  function renderSkillRadar(coverage) {
+    const N        = coverage.length;
+    const radius   = 165;
+    const padding  = 110;
+    const size     = (radius + padding) * 2;
+    const cx       = size / 2;
+    const cy       = size / 2;
+    const startA   = -Math.PI / 2;
+    const angleAt  = i => startA + i * 2 * Math.PI / N;
+
+    // Concentric rings at 20/40/60/80/100%
+    const rings = [0.2, 0.4, 0.6, 0.8, 1].map(rf => {
+      const pts = Array.from({ length: N }, (_, i) => {
+        const a = angleAt(i);
+        return `${cx + Math.cos(a) * radius * rf},${cy + Math.sin(a) * radius * rf}`;
+      }).join(' ');
+      return `<polygon points="${pts}" fill="none" stroke="#2d3348" stroke-width="1"/>`;
+    }).join('');
+
+    // Spoke axes
+    const axes = Array.from({ length: N }, (_, i) => {
+      const a = angleAt(i);
+      return `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * radius}" y2="${cy + Math.sin(a) * radius}" stroke="#2d3348" stroke-width="1"/>`;
+    }).join('');
+
+    // Group labels just outside the outer ring
+    const labels = coverage.map((g, i) => {
+      const a = angleAt(i);
+      const lx = cx + Math.cos(a) * (radius + 14);
+      const ly = cy + Math.sin(a) * (radius + 14);
+      const cosA = Math.cos(a);
+      const anchor = cosA > 0.2 ? 'start' : cosA < -0.2 ? 'end' : 'middle';
+      return `<text x="${lx}" y="${ly}" text-anchor="${anchor}"
+                   dominant-baseline="middle" fill="#94a3b8" font-size="10"
+                   font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+                ${escHtml(g.group_name)}
+              </text>`;
+    }).join('');
+
+    // 20% scale numbers along the top axis
+    const scaleNumbers = [20, 40, 60, 80, 100].map(v => {
+      const r = (v / 100) * radius;
+      return `<text x="${cx + 3}" y="${cy - r}" fill="#475569" font-size="8"
+                   text-anchor="start" dominant-baseline="middle">${v}</text>`;
+    }).join('');
+
+    // Filled data polygon
+    const dataPoints = coverage.map((g, i) => {
+      const a = angleAt(i);
+      const r = Math.max(0, Math.min(100, g.coverage_pct)) / 100 * radius;
+      return `${cx + Math.cos(a) * r},${cy + Math.sin(a) * r}`;
+    }).join(' ');
+
+    // Per-group dot with native SVG tooltip on hover
+    const dots = coverage.map((g, i) => {
+      const a = angleAt(i);
+      const r = Math.max(0, Math.min(100, g.coverage_pct)) / 100 * radius;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      const tip = `${g.group_name}: ${g.coverage_pct}% (${g.trained_count}/${g.total_count} skills, ${fmtNum(g.total_sp)} SP)`;
+      return `<circle cx="${x}" cy="${y}" r="3" fill="#38bdf8" stroke="#0f1117" stroke-width="1">
+                <title>${escAttr(tip)}</title>
+              </circle>`;
+    }).join('');
+
+    return `
+      <svg viewBox="0 0 ${size} ${size}"
+           style="width:100%;max-width:${size}px;height:auto;display:block">
+        ${rings}
+        ${axes}
+        ${scaleNumbers}
+        <polygon points="${dataPoints}" fill="rgba(56,189,248,0.18)"
+                 stroke="#38bdf8" stroke-width="2" stroke-linejoin="round"/>
+        ${dots}
+        ${labels}
+      </svg>`;
   }
 
   function romanLevel(n) {

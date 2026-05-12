@@ -25,7 +25,7 @@ from esi import (
     get_corp_contracts, get_corp_projects, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
-    get_type_info, get_system_info, get_server_status,
+    get_type_info, get_group_info, get_system_info, get_server_status,
     open_contract_in_client,
     resolve_names, resolve_type_ids, get_jita_buy_max,
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
@@ -624,6 +624,71 @@ async def projects(session: str | None = Cookie(None)):
     }
 
 
+# EVE skill group IDs (inventory category 16) used by the Member page radar chart.
+SKILL_GROUP_IDS = [
+    255, 256, 257, 258, 266, 268, 269, 270, 272, 273, 274, 275, 278,
+    1209, 1210, 1213, 1216, 1217, 1218, 1240, 1241, 1545, 1570,
+]
+_skill_group_cache: dict | None = None
+
+
+async def _ensure_skill_group_map() -> dict:
+    """One-time fetch of skill→group mappings via /universe/groups/{id}/."""
+    global _skill_group_cache
+    if _skill_group_cache is not None:
+        return _skill_group_cache
+    results = await asyncio.gather(*[get_group_info(gid) for gid in SKILL_GROUP_IDS])
+    skill_to_group: dict[int, int] = {}
+    group_names:    dict[int, str] = {}
+    group_counts:   dict[int, int] = {}
+    for gid, group in zip(SKILL_GROUP_IDS, results):
+        if not group:
+            continue
+        group_names[gid]  = group.get("name", f"Group {gid}")
+        type_ids = group.get("types", []) or []
+        group_counts[gid] = len(type_ids)
+        for tid in type_ids:
+            skill_to_group[tid] = gid
+    _skill_group_cache = {
+        "skill_to_group": skill_to_group,
+        "group_names":    group_names,
+        "group_counts":   group_counts,
+    }
+    return _skill_group_cache
+
+
+async def _build_skill_coverage(skills_data: dict) -> list[dict]:
+    """Returns per-group coverage list: name, coverage_pct, trained_count, total, sp."""
+    if not skills_data:
+        return []
+    g = await _ensure_skill_group_map()
+    per_levels  = {gid: 0 for gid in SKILL_GROUP_IDS}
+    per_trained = {gid: 0 for gid in SKILL_GROUP_IDS}
+    per_sp      = {gid: 0 for gid in SKILL_GROUP_IDS}
+    for s in skills_data.get("skills", []):
+        gid = g["skill_to_group"].get(s.get("skill_id"))
+        if gid is None:
+            continue
+        per_levels[gid]  += s.get("active_skill_level", 0)
+        per_trained[gid] += 1
+        per_sp[gid]      += s.get("skillpoints_in_skill", 0)
+    out = []
+    for gid in SKILL_GROUP_IDS:
+        total = g["group_counts"].get(gid, 0)
+        if total == 0:
+            continue
+        coverage_pct = (per_levels[gid] / (5 * total)) * 100
+        out.append({
+            "group_id":      gid,
+            "group_name":    g["group_names"].get(gid, f"Group {gid}"),
+            "coverage_pct":  round(coverage_pct, 1),
+            "trained_count": per_trained[gid],
+            "total_count":   total,
+            "total_sp":      per_sp[gid],
+        })
+    return out
+
+
 # Special-case priority buckets for the project list (lower number = higher priority).
 PROJECT_TRACKING_NAMES = {"Remote Boost Shield", "Armor Remote Repair"}
 PROJECT_LOOT_NAMES = {
@@ -907,7 +972,11 @@ async def member(session: str | None = Cookie(None)):
                 for s in skills.get("skills", [])
             )
         )
-        skills_summary = {"total_sp": skills.get("total_sp", 0), "training_active": training_active}
+        skills_summary = {
+            "total_sp": skills.get("total_sp", 0),
+            "training_active": training_active,
+            "coverage": await _build_skill_coverage(skills),
+        }
 
     location_block = None
     if location:
