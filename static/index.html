@@ -437,6 +437,26 @@
 
     .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
 
+    .contract-sum {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 1.25rem;
+      padding: 0.55rem 0.9rem;
+      background: #181b27;
+      border: 1px solid #2d3348;
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+    .cs-stat { white-space: nowrap; }
+    .cs-stat b {
+      color: #e2e8f0;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .cs-stat .cs-isk { color: #38bdf8; }
+
     /* ── Open in EVE button ── */
     .btn-ingame {
       display: inline-flex;
@@ -1132,6 +1152,7 @@
 
     // ── Hauling ──
     document.getElementById('pane-hauling').innerHTML = hauling.length ? `
+      ${haulingSummary(hauling)}
       <div class="card full">
         <table>
           <thead><tr>
@@ -1167,6 +1188,7 @@
 
     // ── Abyssal / Auction ──
     document.getElementById('pane-abyssal').innerHTML = abyssal.length ? `
+      ${abyssalSummary(abyssal)}
       <div class="card full">
         <table>
           <thead><tr>
@@ -1199,6 +1221,7 @@
       auction: 'Auction', loan: 'Loan' }[t] || t || 'Unknown');
 
     document.getElementById('pane-others').innerHTML = others.length ? `
+      ${othersSummary(others)}
       <div class="card full">
         <table>
           <thead><tr>
@@ -1281,6 +1304,60 @@
       btn.disabled = false;
       btn.title = 'Open in EVE client';
     }, 2500);
+  }
+
+  function haulingSummary(list) {
+    const vol         = list.reduce((s, c) => s + (c.volume     || 0), 0);
+    const reward      = list.reduce((s, c) => s + (c.reward     || 0), 0);
+    const collateral  = list.reduce((s, c) => s + (c.collateral || 0), 0);
+    const outstanding = list.filter(c => c.status === 'outstanding').length;
+    const inProgress  = list.filter(c => c.status === 'in_progress').length;
+    const avgPerM3    = vol > 0 ? reward / vol : 0;
+    const avgReward   = list.length ? reward / list.length : 0;
+    return `
+      <div class="contract-sum">
+        <span class="cs-stat"><b>${list.length}</b> contracts</span>
+        <span class="cs-stat">${outstanding} outstanding · ${inProgress} in&nbsp;progress</span>
+        <span class="cs-stat">Volume <b>${fmtNum(Math.round(vol))} m³</b></span>
+        <span class="cs-stat">Reward <b class="cs-isk">${fmtISK(reward)} ISK</b></span>
+        <span class="cs-stat">Collateral <b>${fmtISK(collateral)} ISK</b></span>
+        <span class="cs-stat">Avg <b>${fmtISK(avgReward)} ISK</b> / contract</span>
+        <span class="cs-stat">Rate <b>${fmtISK(avgPerM3)} ISK/m³</b></span>
+      </div>`;
+  }
+
+  function abyssalSummary(list) {
+    const startingBid = list.reduce((s, c) => s + (c.price || 0), 0);
+    const buyouts     = list.filter(c => c.buyout);
+    const buyoutSum   = buyouts.reduce((s, c) => s + (c.buyout || 0), 0);
+    const outstanding = list.filter(c => c.status === 'outstanding').length;
+    const inProgress  = list.filter(c => c.status === 'in_progress').length;
+    return `
+      <div class="contract-sum">
+        <span class="cs-stat"><b>${list.length}</b> auctions</span>
+        <span class="cs-stat">${outstanding} outstanding · ${inProgress} accepted</span>
+        <span class="cs-stat">Starting bids <b class="cs-isk">${fmtISK(startingBid)} ISK</b></span>
+        ${buyouts.length
+          ? `<span class="cs-stat"><b>${buyouts.length}</b> w/ buyout · <b class="cs-isk">${fmtISK(buyoutSum)} ISK</b></span>`
+          : ''}
+      </div>`;
+  }
+
+  function othersSummary(list) {
+    const totalPrice  = list.reduce((s, c) => s + (c.price || 0), 0);
+    const outstanding = list.filter(c => c.status === 'outstanding').length;
+    const inProgress  = list.filter(c => c.status === 'in_progress').length;
+    const byType = {};
+    list.forEach(c => { byType[c.type] = (byType[c.type] || 0) + 1; });
+    const typeBreakdown = Object.entries(byType)
+      .map(([t, n]) => `${n} ${typeLabel(t)}`).join(' · ');
+    return `
+      <div class="contract-sum">
+        <span class="cs-stat"><b>${list.length}</b> contracts</span>
+        <span class="cs-stat">${outstanding} outstanding · ${inProgress} in&nbsp;progress</span>
+        ${typeBreakdown ? `<span class="cs-stat">${escHtml(typeBreakdown)}</span>` : ''}
+        <span class="cs-stat">Total price <b class="cs-isk">${fmtISK(totalPrice)} ISK</b></span>
+      </div>`;
   }
 
   function shortLoc(name) {
