@@ -841,7 +841,7 @@
         <div class="page-title" style="margin:0">Corporation Contracts</div>
         <div style="display:flex;align-items:center;gap:0.6rem">
           <span id="contracts-updated" style="font-size:0.7rem;color:#475569"
-                title="ESI caches this endpoint for ~5 minutes; refresh re-asks but may return same data."></span>
+                title="Auto-refresh every 5 min (matches ESI's cache TTL). Pauses when tab is hidden or another view is open. Click Refresh to force."></span>
           <button class="btn-action" onclick="loadContracts(true)">Refresh</button>
         </div>
       </div>
@@ -932,8 +932,10 @@
 
 <script>
   let currentUser = null;
+  let currentView = null;
   let contractsTimer = null;
   let contractsData = null;
+  const CONTRACTS_REFRESH_MS = 300000;  // 5 min — matches ESI cache TTL
   const sortState = {
     hauling: { col: null, dir: 'desc' },
     abyssal: { col: null, dir: 'desc' },
@@ -1018,10 +1020,16 @@
   }
 
   function showView(view) {
+    currentView = view;
     ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
+    // Cancel timers for views we're leaving so they don't keep polling ESI.
+    if (view !== 'contracts' && contractsTimer) {
+      clearTimeout(contractsTimer);
+      contractsTimer = null;
+    }
     if (view === 'contracts') loadContracts();
     if (view === 'projects') loadProjects();
     if (view === 'structures') loadStructures();
@@ -1030,6 +1038,15 @@
     if (view === 'admin') loadAdmin();
   }
 
+  // Pause/resume contract auto-refresh based on tab visibility.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (contractsTimer) { clearTimeout(contractsTimer); contractsTimer = null; }
+    } else if (currentView === 'contracts' && !contractsTimer) {
+      loadContracts();  // resume — fetch once and reschedule
+    }
+  });
+
   // ── Contracts ─────────────────────────────────────────────────────────────
 
   let contractsLastUpdated = null;
@@ -1037,6 +1054,7 @@
 
   async function loadContracts(force) {
     if (contractsTimer) clearTimeout(contractsTimer);
+    contractsTimer = null;
     try {
       const url = force ? '/api/contracts?t=' + Date.now() : '/api/contracts';
       const opts = force ? { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } } : {};
@@ -1057,7 +1075,10 @@
     } catch {
       showError('contracts-error', 'Network error — could not load contracts.');
     }
-    contractsTimer = setTimeout(loadContracts, 60000);
+    // Only reschedule if user is still on Contracts and the tab is visible.
+    if (currentView === 'contracts' && !document.hidden) {
+      contractsTimer = setTimeout(loadContracts, CONTRACTS_REFRESH_MS);
+    }
   }
 
   function updateContractsUpdatedLabel() {
