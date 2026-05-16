@@ -47,14 +47,23 @@ Match the dark-theme card style from the reference project (`claude-shelly-plug`
 - `gh` CLI is not installed — use raw `git` commands only
 - GitHub repository git@github.com:pa0l0s/eve-chuji-home.git
 
-## Nas File Deploy
-Deploy files to paolo@nasty:/srv/dev-disk-by-uuid-38b0ee7f-c1e1-4567-96bd-305378001aeb/nasty2/html/eve-chuji-homepage using rsync or scp
+## Deploy
 
-## Docker Deploy
-Use Proxteiner API:
-URL: http://192.168.0.24:9000/ 
-API_KEY: ptr_7pN8chEVqg4qTohwXoWbmEuRdzO2kHBK7rGx3ORUo8Y=
-Use port 8760 in docker. Local Nginx Proxy Manager will redirect https://chuji.swoojeff.online to 192.168.0.24:8760
+**Run `./deploy.sh`** — it does rsync + Portainer stack env sync + redeploy + verify. Details below for when it needs changing.
+
+### Nas File Deploy
+Sync the working tree to `paolo@nasty:/srv/dev-disk-by-uuid-38b0ee7f-c1e1-4567-96bd-305378001aeb/nasty2/html/eve-chuji-homepage`.
+SSH as `paolo@nasty` works with `-o BatchMode=yes` (no password). No docker CLI access as `paolo` — inspect containers via the Portainer API instead.
+rsync MUST exclude `data/` (the live SQLite DB lives there), plus `.git/ venv/ __pycache__/ *.pyc .pytest_cache/ .claude/ node_modules/`. The app is bind-mounted into the container, so synced files are live immediately. Dry-run first with `-azn --itemize-changes`.
+
+### Docker Deploy
+Portainer ("Proxteiner") API: `http://192.168.0.24:9000/api` — header `X-API-Key: ptr_7pN8chEVqg4qTohwXoWbmEuRdzO2kHBK7rGx3ORUo8Y=`
+App = Portainer **stack id 110** (`eve-chuji-homepage`), **endpointId 2** (`local`). Port 8760; Nginx Proxy Manager redirects https://chuji.pl → 192.168.0.24:8760.
+Restart to pick up new code: `POST /api/stacks/110/stop?endpointId=2` then `POST /api/stacks/110/start?endpointId=2`.
+**GOTCHA — env vars:** the Portainer stack carries its own `Env` array that OVERRIDES the NAS `.env`. Editing `.env` + restarting is NOT enough. To change an env var (e.g. `EVE_CALLBACK_URL`): GET `/api/stacks/110` + `/api/stacks/110/file`, modify the `Env` entry, then `PUT /api/stacks/110?endpointId=2` with `{stackFileContent, env, prune:false, pullImage:false}`.
+Verify after deploy: container env via `GET /api/endpoints/2/docker/containers/<id>/json`, then `curl -sI https://chuji.pl` expecting HTTP 200.
 
 ## Public URL
-https://chuji.swoojeff.online
+https://chuji.pl
+
+To change the domain, follow `docs/CHANGING_DOMAIN.md` (covers env values + the Portainer stack-env gotcha).

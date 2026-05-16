@@ -3,7 +3,7 @@
 **Date:** 2026-05-10  
 **Status:** Approved  
 **Corporation:** Grupa Operacyjna ZLY CHUJI (ID: 98340844)  
-**Public URL:** https://chuji.swoojeff.online
+**Public URL:** https://chuji.pl
 
 ---
 
@@ -33,7 +33,7 @@ A members-only corporation portal for the EVE Online corporation "Grupa Operacyj
 ```
 EVE_CLIENT_ID=bed583dd2f5e4a01b189d54ead038418
 EVE_CLIENT_SECRET=<secret>
-EVE_CALLBACK_URL=https://chuji.swoojeff.online/api/auth/callback
+EVE_CALLBACK_URL=https://chuji.pl/api/auth/callback
 SECRET_KEY=<generate with openssl rand -hex 32>
 CORP_ID=98340844
 DATABASE_URL=sqlite:///./data/chuji.db
@@ -197,7 +197,7 @@ services:
       - .env
 ```
 
-App files are served directly from the NAS path — deploy by syncing files there (rsync/scp per CLAUDE.md). SQLite lives at `data/chuji.db` inside that same NAS directory, persisted across container restarts. Port 8760 matches the Nginx Proxy Manager redirect for `https://chuji.swoojeff.online`.
+App files are served directly from the NAS path — deploy by syncing files there (rsync/scp per CLAUDE.md). SQLite lives at `data/chuji.db` inside that same NAS directory, persisted across container restarts. Port 8760 matches the Nginx Proxy Manager redirect for `https://chuji.pl`.
 
 ---
 

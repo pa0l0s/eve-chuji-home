@@ -94,7 +94,7 @@ def set_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/test.db")
     monkeypatch.setenv("EVE_CLIENT_ID", "test_client_id")
     monkeypatch.setenv("EVE_CLIENT_SECRET", "test_client_secret")
-    monkeypatch.setenv("EVE_CALLBACK_URL", "https://chuji.swoojeff.online/api/auth/callback")
+    monkeypatch.setenv("EVE_CALLBACK_URL", "https://chuji.pl/api/auth/callback")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-32-chars-minimum!")
     monkeypatch.setenv("CORP_ID", "98340844")
     monkeypatch.setenv("JANICE_LINK_ID", "QcoH7M")
@@ -1844,7 +1844,7 @@ git commit -m "feat: docker-compose with NAS volume mount and tiangolo FastAPI i
 - [ ] Generate `SECRET_KEY`: `openssl rand -hex 32` and add to `.env`
 - [ ] Deploy files to NAS: `rsync -av --exclude='.git' --exclude='__pycache__' . paolo@nasty:/srv/dev-disk-by-uuid-38b0ee7f-c1e1-4567-96bd-305378001aeb/nasty2/html/eve-chuji-homepage/`
 - [ ] Start container via Proxteiner API or `docker compose up -d`
-- [ ] Open https://chuji.swoojeff.online — login view should appear
+- [ ] Open https://chuji.pl — login view should appear
 - [ ] Login with EVE SSO — should redirect back and show Projects view
 - [ ] Verify non-corp member gets 403 error page
 

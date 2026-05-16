@@ -9,7 +9,7 @@ def set_env(tmp_path, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path}/test.db")
     monkeypatch.setenv("EVE_CLIENT_ID", "test_client_id")
     monkeypatch.setenv("EVE_CLIENT_SECRET", "test_client_secret")
-    monkeypatch.setenv("EVE_CALLBACK_URL", "https://chuji.swoojeff.online/api/auth/callback")
+    monkeypatch.setenv("EVE_CALLBACK_URL", "https://chuji.pl/api/auth/callback")
     monkeypatch.setenv("SECRET_KEY", "test-secret-key-32-chars-minimum!")
     monkeypatch.setenv("CORP_ID", "98340844")
     monkeypatch.setenv("JANICE_LINK_ID", "QcoH7M")
