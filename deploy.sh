@@ -17,7 +17,7 @@ PUBLIC_URL="https://chuji.pl"
 DRY_RUN="${1:-}"
 
 RSYNC_EXCLUDES=(--exclude '.git/' --exclude 'venv/' --exclude '__pycache__/'
-  --exclude '*.pyc' --exclude '.pytest_cache/' --exclude 'data/'
+  --exclude '*.pyc' --exclude '.pytest_cache/' --exclude 'data/' --exclude '*.db'
   --exclude '.claude/' --exclude 'node_modules/')
 
 echo "==> rsync to ${NAS_HOST}:${NAS_PATH}"
