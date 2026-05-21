@@ -139,7 +139,7 @@ Run:
 chmod +x scripts/optimize_backgrounds.sh
 ./scripts/optimize_backgrounds.sh
 ```
-Expected: 61 lines of `<source> -> bg-NN.jpg`, then `Done: 61 images -> .../static/backgrounds` and a `du -sh` total (roughly 5–15 MB).
+Expected: 60 lines of `<source> -> bg-NN.jpg`, then `Done: 60 images -> .../static/backgrounds` and a `du -sh` total (roughly 5–15 MB). (60, not 61: `wp8755431-eve-online-wallpapers (1).jpg` is a byte-identical duplicate and is excluded from `SOURCES`.)
 
 - [ ] **Step 3: Verify the output**
 
@@ -149,7 +149,7 @@ ls static/backgrounds/ | wc -l
 ls static/backgrounds/ | head -1
 ls static/backgrounds/ | tail -1
 ```
-Expected: `61`, then `bg-01.jpg`, then `bg-61.jpg`.
+Expected: `60`, then `bg-01.jpg`, then `bg-60.jpg`.
 
 - [ ] **Step 4: Commit**
 
@@ -195,7 +195,7 @@ async def test_backgrounds_returns_json_list(client):
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, list)
-    assert len(data) == 61
+    assert len(data) == 60
 
 
 async def test_backgrounds_entries_are_real_image_files(client):
