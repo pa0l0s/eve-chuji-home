@@ -580,6 +580,22 @@ async def get_jita_prices(type_id: int) -> dict:
     return {"buy": buy, "sell": sell}
 
 
+async def get_market_history(type_id: int) -> list[dict]:
+    """Daily Jita market history (The Forge) for the type, oldest first.
+    Each record: {date, average, highest, lowest, order_count, volume}.
+    Returns [] on any ESI failure (incl. a 404 for an untraded type)."""
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(
+                f"{ESI_BASE}/markets/{FORGE_REGION_ID}/history/",
+                params={"type_id": type_id},
+            )
+            r.raise_for_status()
+            return sorted(r.json(), key=lambda d: d.get("date", ""))
+        except httpx.HTTPError:
+            return []
+
+
 async def get_corp_structures(corporation_id: int, access_token: str) -> list:
     result = []
     page = 1
