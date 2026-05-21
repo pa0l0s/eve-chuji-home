@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import aiosqlite
 from pathlib import Path
@@ -81,6 +82,13 @@ async def init_db():
                 project_name   TEXT PRIMARY KEY,
                 price_excluded INTEGER DEFAULT 0,
                 updated_at     REAL NOT NULL
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS ship_types_cache (
+                id         INTEGER PRIMARY KEY CHECK (id = 1),
+                type_ids   TEXT NOT NULL,
+                fetched_at REAL NOT NULL
             )
         """)
         # One-time seed of NPC-priced project names — only when table is empty,
@@ -415,6 +423,30 @@ async def cache_type(type_id: int, name: str, group_id: int | None = None):
                 group_id = excluded.group_id,
                 cached_at = excluded.cached_at
         """, (type_id, name, group_id, time.time()))
+        await db.commit()
+
+
+async def get_ship_types_cache() -> dict | None:
+    """Returns {'type_ids': set[int], 'fetched_at': float} or None if unset."""
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT type_ids, fetched_at FROM ship_types_cache WHERE id = 1"
+        ) as cur:
+            row = await cur.fetchone()
+            if not row:
+                return None
+            return {"type_ids": set(json.loads(row[0])), "fetched_at": row[1]}
+
+
+async def set_ship_types_cache(type_ids: set[int], fetched_at: float | None = None):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute("""
+            INSERT INTO ship_types_cache (id, type_ids, fetched_at)
+            VALUES (1, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                type_ids = excluded.type_ids,
+                fetched_at = excluded.fetched_at
+        """, (json.dumps(sorted(type_ids)), fetched_at if fetched_at is not None else time.time()))
         await db.commit()
 
 

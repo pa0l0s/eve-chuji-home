@@ -1,5 +1,6 @@
 import ast
 import os
+import asyncio
 import time
 import base64
 import httpx
@@ -9,10 +10,13 @@ from db import (
     get_cached_structure, cache_structure_name,
     get_cached_type, cache_type,
     get_cached_system, cache_system,
+    get_ship_types_cache, set_ship_types_cache,
     list_all_character_ids,
 )
 
 ESI_BASE = "https://esi.evetech.net/latest"
+SHIP_CATEGORY_ID = 6
+SHIP_TYPES_TTL = 2 * 86400  # ships change rarely; refresh at most every 2 days
 EVE_SSO_TOKEN_URL = "https://login.eveonline.com/v2/oauth/token"
 
 JITA_44_STATION_ID = 60003760
@@ -258,6 +262,46 @@ async def get_corp_contracts(corporation_id: int, access_token: str) -> list:
                 break
             page += 1
     return result
+
+
+async def get_corp_contract_items(corporation_id: int, contract_id: int,
+                                   access_token: str) -> list:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/corporations/{corporation_id}/contracts/{contract_id}/items/",
+            params={"datasource": "tranquility"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def _fetch_ship_type_ids_from_esi() -> set[int]:
+    """All ship type_ids: category 6 → its groups → each group's types."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{ESI_BASE}/universe/categories/{SHIP_CATEGORY_ID}/")
+        r.raise_for_status()
+        group_ids = r.json().get("groups", [])
+        ids: set[int] = set()
+        for gid in group_ids:
+            gr = await client.get(f"{ESI_BASE}/universe/groups/{gid}/")
+            gr.raise_for_status()
+            ids.update(gr.json().get("types", []))
+        return ids
+
+
+async def get_ship_type_ids() -> set[int]:
+    """Set of all ship type_ids. Cached in SQLite, refreshed at most every 2
+    days. On ESI failure, falls back to the stale cached set (or empty)."""
+    cached = await get_ship_types_cache()
+    if cached and (time.time() - cached["fetched_at"]) < SHIP_TYPES_TTL:
+        return cached["type_ids"]
+    try:
+        ids = await _fetch_ship_type_ids_from_esi()
+    except httpx.HTTPError:
+        return cached["type_ids"] if cached else set()
+    await set_ship_types_cache(ids)
+    return ids
 
 
 async def get_corp_projects(corporation_id: int, access_token: str) -> list:
@@ -511,6 +555,29 @@ async def get_jita_buy_max(type_id: int) -> float | None:
             return max(jita) if jita else None
         except httpx.HTTPError:
             return None
+
+
+async def get_jita_sell_min(type_id: int) -> float | None:
+    """Lowest sell order price in Jita 4-4 for the given type, or None."""
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(
+                f"{ESI_BASE}/markets/{FORGE_REGION_ID}/orders/",
+                params={"order_type": "sell", "type_id": type_id, "page": 1},
+            )
+            r.raise_for_status()
+            jita = [o["price"] for o in r.json()
+                    if o.get("location_id") == JITA_44_STATION_ID]
+            return min(jita) if jita else None
+        except httpx.HTTPError:
+            return None
+
+
+async def get_jita_prices(type_id: int) -> dict:
+    """{'buy': highest 4-4 buy, 'sell': lowest 4-4 sell}; either may be None."""
+    buy, sell = await asyncio.gather(
+        get_jita_buy_max(type_id), get_jita_sell_min(type_id))
+    return {"buy": buy, "sell": sell}
 
 
 async def get_corp_structures(corporation_id: int, access_token: str) -> list:
