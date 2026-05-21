@@ -23,7 +23,7 @@ from esi import (
     get_character_contracts, get_character_fleet,
     get_fleet_info, get_fleet_members, get_fleet_wings, move_fleet_member,
     get_corp_contracts, get_corp_contract_items, get_ship_type_ids,
-    get_jita_prices,
+    get_jita_prices, get_market_history,
     get_corp_projects, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
@@ -820,6 +820,28 @@ async def project_contributors(project_id: str, session: str | None = Cookie(Non
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="ESI unavailable")
     return {"project_id": project_id, "contributors": contributors}
+
+
+# Jita market history updates ~once/day; cache per type for 6 h to bound ESI load.
+_market_history_cache: dict[int, tuple[float, list]] = {}
+MARKET_HISTORY_TTL = 6 * 3600
+
+
+async def _cached_market_history(type_id: int) -> list:
+    cached = _market_history_cache.get(type_id)
+    if cached and (time.time() - cached[0]) < MARKET_HISTORY_TTL:
+        return cached[1]
+    rows = await get_market_history(type_id)
+    _market_history_cache[type_id] = (time.time(), rows)
+    return rows
+
+
+@app.get("/api/market/{type_id}/history")
+async def market_history(type_id: int, session: str | None = Cookie(None)):
+    """Last 90 days of Jita market history for a type. Session-protected."""
+    await get_current_character_id(session)  # raises 401 without a valid session
+    rows = await _cached_market_history(type_id)
+    return {"type_id": type_id, "history": rows[-90:]}
 
 
 @app.get("/api/structures")
