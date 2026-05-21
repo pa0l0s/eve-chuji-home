@@ -46,7 +46,9 @@ def req(method, path, body=None):
         headers={"X-API-Key": K, "Content-Type": "application/json"})
     if body is not None:
         r.data = json.dumps(body).encode()
-    return json.load(urllib.request.urlopen(r, timeout=60))
+    with urllib.request.urlopen(r, timeout=60) as resp:
+        raw = resp.read()
+    return json.loads(raw) if raw else None
 
 # local .env is the single source of truth for env vars
 env = []
@@ -59,25 +61,42 @@ with open(".env") as f:
         env.append({"name": k.strip(), "value": v.strip()})
 
 filec = req("GET", f"/stacks/{SID}/file")["StackFileContent"]
-res = req("PUT", f"/stacks/{SID}?endpointId={EID}",
-          {"stackFileContent": filec, "env": env,
-           "prune": False, "pullImage": False})
-print("   stack status:", res.get("Status"))
+req("PUT", f"/stacks/{SID}?endpointId={EID}",
+    {"stackFileContent": filec, "env": env,
+     "prune": False, "pullImage": False})
 
-# verify the running container picked up the env
+# A PUT alone only recreates the container when the compose/env changed, so it
+# does NOT reliably pick up new Python code (main.py/esi.py are loaded once at
+# process start). Force a full stop/start so every deploy restarts the app.
 import time
-time.sleep(6)
-conts = req("GET", f"/endpoints/{EID}/docker/containers/json?all=1")
-cid = next(c["Id"] for c in conts
-           if any("eve-chuji" in n for n in c["Names"]))
-ins = req("GET", f"/endpoints/{EID}/docker/containers/{cid}/json")
+req("POST", f"/stacks/{SID}/stop?endpointId={EID}")
+req("POST", f"/stacks/{SID}/start?endpointId={EID}")
+
+# wait for the container to report running, then show its callback env
+ins = None
+for _ in range(20):
+    time.sleep(3)
+    conts = req("GET", f"/endpoints/{EID}/docker/containers/json?all=1")
+    cid = next((c["Id"] for c in conts
+                if any("eve-chuji" in n for n in c["Names"])), None)
+    if cid:
+        ins = req("GET", f"/endpoints/{EID}/docker/containers/{cid}/json")
+        if ins["State"]["Status"] == "running":
+            break
+if ins is None:
+    raise SystemExit("   ERROR: eve-chuji container not found after restart")
 cb = next((e for e in ins["Config"]["Env"]
            if e.startswith("EVE_CALLBACK_URL=")), "(missing)")
 print("   container state:", ins["State"]["Status"])
 print("   container", cb)
 PY
 
-echo "==> verify ${PUBLIC_URL}"
-code=$(curl -s -m 15 -o /dev/null -w '%{http_code}' "${PUBLIC_URL}/")
+echo "==> verify ${PUBLIC_URL} (waiting for the app to come back up)"
+code=""
+for _ in $(seq 1 15); do
+  code=$(curl -s -m 15 -o /dev/null -w '%{http_code}' "${PUBLIC_URL}/" || true)
+  [[ "$code" == "200" ]] && break
+  sleep 4
+done
 echo "   ${PUBLIC_URL} -> HTTP ${code}"
-[[ "$code" == "200" ]] && echo "==> deploy OK" || { echo "==> WARNING: non-200"; exit 1; }
+[[ "$code" == "200" ]] && echo "==> deploy OK" || { echo "==> WARNING: non-200 after retries"; exit 1; }
