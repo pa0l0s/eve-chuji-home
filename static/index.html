@@ -2018,33 +2018,60 @@
         ${rewardLine}
       </div>`;
 
-    const rows = sorted.map((c, i) => {
-      const pct = projTotal > 0 ? (c.contributed / projTotal * 100) : 0;
-      const isoLast = c.last_modified ? new Date(c.last_modified).toLocaleDateString() : '';
+    return header + renderContributorPie(sorted, totalContributed);
+  }
+
+  const PIE_COLORS = ['#38bdf8', '#4ade80', '#fbbf24', '#f87171', '#a78bfa',
+                      '#fb923c', '#2dd4bf', '#f472b6', '#60a5fa', '#a3e635'];
+  const PIE_OTHERS_COLOR = '#475569';
+
+  // Donut pie of contributor share + compact legend. `sorted` is contributors
+  // sorted by contributed desc; `total` is the sum of all contributed.
+  function renderContributorPie(sorted, total) {
+    if (total <= 0) {
+      return '<p style="color:#475569;text-align:center;padding:1rem">No contributions recorded.</p>';
+    }
+    // Top 10 contributors as slices; rank 11+ collapse into one "Others" slice.
+    const slices = sorted.slice(0, 10).map((c, i) => ({
+      label: c.name || 'Unknown', value: c.contributed || 0, color: PIE_COLORS[i],
+    }));
+    if (sorted.length > 10) {
+      const rest = sorted.slice(10).reduce((s, c) => s + (c.contributed || 0), 0);
+      if (rest > 0) slices.push({ label: 'Others', value: rest, color: PIE_OTHERS_COLOR });
+    }
+
+    const size = 180, r = 70, sw = 34, cx = size / 2, cy = size / 2;
+    const circ = 2 * Math.PI * r;
+    let acc = 0;
+    const ring = slices.map(s => {
+      const frac = s.value / total;
+      const seg = frac * circ;
+      const tip = `${s.label}: ${fmtNum(s.value)} (${(frac * 100).toFixed(1)}%)`;
+      const c = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none"
+          stroke="${s.color}" stroke-width="${sw}"
+          stroke-dasharray="${seg.toFixed(2)} ${(circ - seg).toFixed(2)}"
+          stroke-dashoffset="${(-acc).toFixed(2)}"><title>${escAttr(tip)}</title></circle>`;
+      acc += seg;
+      return c;
+    }).join('');
+
+    const legend = slices.map(s => {
+      const pct = (s.value / total * 100).toFixed(1);
       return `
-        <div style="display:grid;grid-template-columns:24px 36px 1fr auto;gap:0.75rem;
-                    align-items:center;padding:0.5rem 0;border-bottom:1px solid #1a1e2e">
-          <span style="color:#475569;font-size:0.75rem;text-align:right;font-variant-numeric:tabular-nums">${i + 1}</span>
-          <img src="https://images.evetech.net/characters/${c.id}/portrait?size=64"
-               alt="" style="width:32px;height:32px;border-radius:50%;background:#252a3d">
-          <div style="min-width:0">
-            <div style="color:#e2e8f0;font-weight:500;display:flex;align-items:center;gap:0.4rem">
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.name || 'Unknown')}</span>
-              ${characterZkillLink(c.id)}
-            </div>
-            <div style="height:4px;background:#252a3d;border-radius:2px;margin-top:0.3rem;overflow:hidden">
-              <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
-            </div>
-            ${isoLast ? `<div style="font-size:0.65rem;color:#475569;margin-top:0.15rem">last contribution ${isoLast}</div>` : ''}
-          </div>
-          <div style="text-align:right">
-            <div style="color:#38bdf8;font-weight:600;font-size:0.85rem">${fmtNum(c.contributed)}</div>
-            <div style="color:#64748b;font-size:0.7rem">${pct.toFixed(1)}%</div>
-          </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;padding:0.15rem 0">
+          <span style="width:10px;height:10px;border-radius:2px;background:${s.color};flex:0 0 auto"></span>
+          <span style="color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto">${escHtml(s.label)}</span>
+          <span style="color:#64748b;font-variant-numeric:tabular-nums;flex:0 0 auto">${pct}%</span>
         </div>`;
     }).join('');
 
-    return header + rows;
+    return `
+      <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap;justify-content:center">
+        <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="flex:0 0 auto;display:block">
+          <g transform="rotate(-90 ${cx} ${cy})">${ring}</g>
+        </svg>
+        <div style="flex:1 1 200px;min-width:180px">${legend}</div>
+      </div>`;
   }
 
   function projectPriorityBadge(prio) {
