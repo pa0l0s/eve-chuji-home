@@ -23,6 +23,24 @@
       min-height: 100vh;
     }
 
+    /* ── Cycling background image ── */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(15, 17, 23, 0.86), rgba(15, 17, 23, 0.92)),
+        var(--bg-image, none);
+      background-size: cover, cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    body.bg-ready::before { opacity: 1; }
+
     /* ── Nav ── */
     nav {
       background: #1e2130;
@@ -131,9 +149,9 @@
 
     .layout {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
       gap: 1.25rem;
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
     }
 
@@ -142,7 +160,7 @@
       font-weight: 600;
       color: #f8fafc;
       margin-bottom: 1.5rem;
-      max-width: 1200px;
+      max-width: 1400px;
       margin-left: auto;
       margin-right: auto;
     }
@@ -436,6 +454,9 @@
     .contract-pane { max-width: 1200px; margin: 0 auto; }
 
     .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
+
+    .contract-row-clickable { cursor: pointer; }
+    .contract-row-clickable:hover > td { background: #232739; }
 
     .contract-sum {
       display: flex;
@@ -846,7 +867,10 @@
         </div>
       </div>
       <div class="tab-strip">
-        <button class="tab-btn active" id="tab-hauling" onclick="showContractTab('hauling')">
+        <button class="tab-btn active" id="tab-ships" onclick="showContractTab('ships')">
+          Ships <span class="tab-count" id="count-ships">0</span>
+        </button>
+        <button class="tab-btn" id="tab-hauling" onclick="showContractTab('hauling')">
           Hauling <span class="tab-count" id="count-hauling">0</span>
         </button>
         <button class="tab-btn" id="tab-abyssal" onclick="showContractTab('abyssal')">
@@ -856,7 +880,8 @@
           Other <span class="tab-count" id="count-others">0</span>
         </button>
       </div>
-      <div id="pane-hauling" class="contract-pane"></div>
+      <div id="pane-ships"   class="contract-pane"></div>
+      <div id="pane-hauling" class="contract-pane hidden"></div>
       <div id="pane-abyssal" class="contract-pane hidden"></div>
       <div id="pane-others"  class="contract-pane hidden"></div>
     </div>
@@ -937,6 +962,7 @@
   let contractsData = null;
   const CONTRACTS_REFRESH_MS = 300000;  // 5 min — matches ESI cache TTL
   const sortState = {
+    ships:   { col: null, dir: 'desc' },
     hauling: { col: null, dir: 'desc' },
     abyssal: { col: null, dir: 'desc' },
     others:  { col: null, dir: 'desc' },
@@ -1091,7 +1117,7 @@
   }
 
   function showContractTab(tab) {
-    ['hauling', 'abyssal', 'others'].forEach(t => {
+    ['ships', 'hauling', 'abyssal', 'others'].forEach(t => {
       document.getElementById('pane-' + t).classList.toggle('hidden', t !== tab);
       document.getElementById('tab-' + t).classList.toggle('active', t === tab);
     });
@@ -1163,13 +1189,50 @@
 
   function renderContracts(data) {
     contractsData = data;
+    const ships   = sortContracts(data.ships   || [], 'ships');
     const hauling = sortContracts(data.hauling || [], 'hauling');
     const abyssal = sortContracts(data.abyssal || [], 'abyssal');
     const others  = sortContracts(data.others  || [], 'others');
 
+    document.getElementById('count-ships').textContent   = ships.length;
     document.getElementById('count-hauling').textContent = hauling.length;
     document.getElementById('count-abyssal').textContent = abyssal.length;
     document.getElementById('count-others').textContent  = others.length;
+
+    // ── Ships ── (rows clickable → contract detail; the in-game button is exempt)
+    document.getElementById('pane-ships').innerHTML = ships.length ? `
+      ${othersSummary(ships)}
+      <div class="card full">
+        <table>
+          <thead><tr>
+            <th style="width:44px"></th>
+            ${sortableTh('ships','title','Title')}
+            ${sortableTh('ships','type','Type')}
+            ${sortableTh('ships','price','Price')}
+            ${sortableTh('ships','hauler','Accepted by')}
+            ${sortableTh('ships','status','Status')}
+            ${sortableTh('ships','expires','Expires')}
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${ships.map(c => `
+              <tr class="contract-row-clickable" title="View contract details"
+                  onclick="openContractDetail(${c.contract_id})">
+                <td>${contractIcon(c, false)}</td>
+                <td style="color:#e2e8f0">
+                  ${escHtml(c.title || 'Contract #' + c.contract_id)}
+                  ${issuerLine(c)}
+                </td>
+                <td><span class="badge badge-muted">${typeLabel(c.type)}</span></td>
+                <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${haulerCell(c)}</td>
+                <td>${statusBadge(c.status)}</td>
+                <td>${timeLeft(c.date_expired)}</td>
+                <td onclick="event.stopPropagation()">${openInEveBtn(c.contract_id)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : '<p class="contract-empty">No active ship contracts.</p>';
 
     // ── Hauling ──
     document.getElementById('pane-hauling').innerHTML = hauling.length ? `
@@ -1213,6 +1276,7 @@
       <div class="card full">
         <table>
           <thead><tr>
+            <th style="width:44px"></th>
             ${sortableTh('abyssal','title','Title')}
             ${sortableTh('abyssal','price','Starting Bid')}
             ${sortableTh('abyssal','buyout','Buyout')}
@@ -1223,6 +1287,7 @@
           <tbody>
             ${abyssal.map(c => `
               <tr>
+                <td>${contractIcon(c)}</td>
                 <td style="color:#e2e8f0">
                   ${escHtml(c.title || 'Auction #' + c.contract_id)}
                   ${issuerLine(c)}
@@ -1237,15 +1302,14 @@
         </table>
       </div>` : '<p class="contract-empty">No active abyssal auctions.</p>';
 
-    // ── Others ──
-    const typeLabel = t => ({ item_exchange: 'Item Exchange', courier: 'Courier',
-      auction: 'Auction', loan: 'Loan' }[t] || t || 'Unknown');
+    // ── Others ── (typeLabel: hoisted global helper)
 
     document.getElementById('pane-others').innerHTML = others.length ? `
       ${othersSummary(others)}
       <div class="card full">
         <table>
           <thead><tr>
+            <th style="width:44px"></th>
             ${sortableTh('others','title','Title')}
             ${sortableTh('others','type','Type')}
             ${sortableTh('others','price','Price')}
@@ -1257,6 +1321,7 @@
           <tbody>
             ${others.map(c => `
               <tr>
+                <td>${contractIcon(c)}</td>
                 <td style="color:#e2e8f0">
                   ${escHtml(c.title || 'Contract #' + c.contract_id)}
                   ${issuerLine(c)}
@@ -1290,6 +1355,102 @@
       return `<span style="color:#4ade80">${escHtml(c.acceptor_name)}</span>${accepted}`;
     }
     return '<span style="color:#475569">–</span>';
+  }
+
+  // interactive=false → static icon (used where the whole row is clickable).
+  function contractIcon(c, interactive = true) {
+    const box = 'width:32px;height:32px;border-radius:4px;display:block';
+    if (!c.icon_type_id) {
+      return `<span style="${box};background:#1e2130;border:1px solid #2d3348"></span>`;
+    }
+    const click = interactive
+      ? ` title="View contract details" style="${box};object-fit:cover;cursor:pointer"
+          onclick="openContractDetail(${c.contract_id})"`
+      : ` alt="" style="${box};object-fit:cover"`;
+    return `<img src="https://images.evetech.net/types/${c.icon_type_id}/icon?size=64"
+              alt="" loading="lazy"${click}
+              onerror="this.style.visibility='hidden'">`;
+  }
+
+  function findContract(id) {
+    const d = contractsData || {};
+    return [...(d.ships || []), ...(d.others || []), ...(d.abyssal || [])]
+      .find(c => c.contract_id === id) || null;
+  }
+
+  async function openContractDetail(id) {
+    const c = findContract(id);
+    const title = c ? (c.title || 'Contract #' + id) : 'Contract #' + id;
+    showModal(title, '<div style="color:#475569;text-align:center;padding:1.5rem">Loading details…</div>');
+    try {
+      const r = await fetch('/api/contracts/' + id + '/detail');
+      if (!r.ok) { setModalBody(cardErrorBlock('Could not load details (' + r.status + ')')); return; }
+      setModalBody(renderContractDetail(c, await r.json()));
+    } catch {
+      setModalBody(cardErrorBlock('Network error'));
+    }
+  }
+
+  function renderContractDetail(c, d) {
+    const typeLabel = t => ({ item_exchange: 'Item Exchange', courier: 'Courier',
+      auction: 'Auction', loan: 'Loan' }[t] || t || 'Unknown');
+    const hero = d.hero || {};
+    const heroImg = hero.type_id
+      ? `<img src="https://images.evetech.net/types/${hero.type_id}/${hero.is_ship ? 'render?size=512' : 'icon?size=64'}"
+            alt="" style="max-width:${hero.is_ship ? '320px' : '64px'};width:100%;
+            border-radius:8px;display:block;margin:0 auto 1rem"
+            onerror="this.style.display='none'">`
+      : '';
+    const price = c && c.price
+      ? `<span style="color:#38bdf8">${fmtISK(c.price)} ISK</span>`
+      : '<span style="color:#475569">–</span>';
+    const meta = c ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;
+                  font-size:0.8rem;margin-bottom:1rem;padding-bottom:0.75rem;
+                  border-bottom:1px solid #2d3348">
+        <div><span style="color:#64748b">Type</span><br>
+          <span class="badge badge-muted">${typeLabel(c.type)}</span></div>
+        <div><span style="color:#64748b">Contract Price</span><br>${price}</div>
+        <div><span style="color:#64748b">Issuer</span><br>
+          <span style="color:#94a3b8">${escHtml(c.issuer_name || '–')}</span></div>
+        <div><span style="color:#64748b">Status</span><br>${statusBadge(c.status)}</div>
+        <div><span style="color:#64748b">Expires</span><br>${timeLeft(c.date_expired)}</div>
+        <div style="align-self:end">${openInEveBtn(c.contract_id)}</div>
+      </div>` : '';
+
+    const cell = v => v == null
+      ? '<span style="color:#475569">–</span>'
+      : fmtISK(v) + ' ISK';
+    const rows = (d.items || []).map(i => `
+      <tr>
+        <td style="color:#e2e8f0">${escHtml(i.name)}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums">${fmtNum(i.quantity)}</td>
+        <td style="text-align:right">${cell(i.buy)}</td>
+        <td style="text-align:right">${cell(i.sell)}</td>
+        <td style="text-align:right">${cell(i.buy_total)}</td>
+        <td style="text-align:right">${cell(i.sell_total)}</td>
+      </tr>`).join('');
+    const t = d.totals || { buy: 0, sell: 0 };
+    const table = (d.items || []).length ? `
+      <table style="width:100%;font-size:0.8rem">
+        <thead><tr>
+          <th style="text-align:left">Item</th>
+          <th style="text-align:right">Qty</th>
+          <th style="text-align:right">Jita Buy</th>
+          <th style="text-align:right">Jita Sell</th>
+          <th style="text-align:right">Buy Total</th>
+          <th style="text-align:right">Sell Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="border-top:2px solid #2d3348;font-weight:600;color:#e2e8f0">
+          <td colspan="4" style="text-align:right;color:#64748b">Contract total</td>
+          <td style="text-align:right">${fmtISK(t.buy)} ISK</td>
+          <td style="text-align:right">${fmtISK(t.sell)} ISK</td>
+        </tr></tfoot>
+      </table>`
+      : '<p style="color:#475569;text-align:center;padding:1rem">No items in this contract.</p>';
+
+    return heroImg + meta + table;
   }
 
   function openInEveBtn(contractId) {
@@ -1901,23 +2062,29 @@
 
   // ── Fleet ─────────────────────────────────────────────────────────────────
 
-  async function loadFleet() {
+  // silent=true: keep the current table on screen and swap in fresh data only
+  // once it's ready (no skeleton flash), so position changes feel seamless.
+  async function loadFleet(silent = false) {
     hideError('fleet-error');
-    document.getElementById('fleet-content').innerHTML =
-      '<div class="skeleton" style="height:120px"></div>';
-    document.getElementById('fleet-actions').innerHTML = '';
+    if (!silent) {
+      document.getElementById('fleet-content').innerHTML =
+        '<div class="skeleton" style="height:120px"></div>';
+      document.getElementById('fleet-actions').innerHTML = '';
+    }
+    const scrollY = window.scrollY;
     try {
       const r = await fetch('/api/fleet/current');
       if (!r.ok) {
         const detail = await r.json().catch(() => ({}));
         showError('fleet-error', detail.detail || `Failed (${r.status})`);
-        document.getElementById('fleet-content').innerHTML = '';
+        if (!silent) document.getElementById('fleet-content').innerHTML = '';
         return;
       }
       renderFleet(await r.json());
+      if (silent) window.scrollTo(0, scrollY);
     } catch {
       showError('fleet-error', 'Network error.');
-      document.getElementById('fleet-content').innerHTML = '';
+      if (!silent) document.getElementById('fleet-content').innerHTML = '';
     }
   }
 
@@ -2262,7 +2429,7 @@
           row.dataset.targetWing || null,
           row.dataset.targetSquad || null,
           row.dataset.targetRole);
-        loadFleet();
+        loadFleet(true);
       });
     });
   }
@@ -2290,7 +2457,7 @@
 
   async function saveCurrentMember(memberId, memberName, wingName, squadName, role) {
     await postSavedPosition(memberId, memberName, wingName, squadName, role);
-    loadFleet();
+    loadFleet(true);
   }
 
   async function removeSavedMember(memberId) {
@@ -2302,7 +2469,7 @@
         showError('fleet-error', 'Remove failed: ' + (d.detail || r.status));
         return;
       }
-      loadFleet();
+      loadFleet(true);
     } catch { showError('fleet-error', 'Network error during remove.'); }
   }
 
@@ -2802,11 +2969,21 @@
              ${w.value}<span class="unit">ISK</span>
            </div>
          </div>`;
+    const usedSp = skills?.total_sp || 0;
+    const unusedSp = skills?.unallocated_sp || 0;
     const skillsCell = skillsErr
       ? `<div class="metric">${cardErrorBlock(skillsErr)}</div>`
       : `<div class="metric">
+           <div class="label">Used Skillpoints</div>
+           <div class="val">${fmtSP(usedSp)}<span class="unit">SP</span></div>
+         </div>`;
+    const unusedSpCell = skillsErr ? '' : `<div class="metric">
+           <div class="label">Unused Skillpoints</div>
+           <div class="val">${fmtSP(unusedSp)}<span class="unit">SP</span></div>
+         </div>`;
+    const totalSpCell = skillsErr ? '' : `<div class="metric">
            <div class="label">Total Skillpoints</div>
-           <div class="val">${fmtSP(skills?.total_sp || 0)}<span class="unit">SP</span></div>
+           <div class="val">${fmtSP(usedSp + unusedSp)}<span class="unit">SP</span></div>
          </div>`;
 
     return `
@@ -2815,6 +2992,8 @@
         <div class="metrics">
           ${walletCell}
           ${skillsCell}
+          ${unusedSpCell}
+          ${totalSpCell}
         </div>
         <div style="margin-top:0.75rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;
                     font-size:0.7rem;color:#64748b">
@@ -2976,8 +3155,8 @@
 
   function renderSkillRadar(coverage) {
     const N        = coverage.length;
-    const radius   = 95;
-    const padding  = 75;
+    const radius   = 110;
+    const padding  = 90;
     const size     = (radius + padding) * 2;
     const cx       = size / 2;
     const cy       = size / 2;
@@ -3007,7 +3186,7 @@
       const cosA = Math.cos(a);
       const anchor = cosA > 0.2 ? 'start' : cosA < -0.2 ? 'end' : 'middle';
       return `<text x="${lx}" y="${ly}" text-anchor="${anchor}"
-                   dominant-baseline="middle" fill="#94a3b8" font-size="8"
+                   dominant-baseline="middle" fill="#94a3b8" font-size="12"
                    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
                 ${escHtml(g.group_name)}
               </text>`;
@@ -3255,5 +3434,50 @@
 
   boot();
 </script>
+  <script>
+  /* Cycling per-session background image. */
+  (function () {
+    var KEY = 'chuji-bg';
+    var MAX_AGE = 5 * 60 * 1000; // 5 minutes
+    var NAME_RE = /^[\w-]+\.(jpg|jpeg|png|webp)$/i;
+
+    // Preload `file`, then render it. Persist the choice only after the image
+    // has actually loaded (persist=true), so a broken filename is never cached.
+    // The reuse path passes persist=false to keep the original chosenAt.
+    function apply(file, persist) {
+      if (typeof file !== 'string' || !NAME_RE.test(file)) return;
+      var img = new Image();
+      img.onload = function () {
+        if (persist) {
+          sessionStorage.setItem(KEY, JSON.stringify({ file: file, chosenAt: Date.now() }));
+        }
+        document.body.style.setProperty('--bg-image', "url('/backgrounds/" + file + "')");
+        document.body.classList.add('bg-ready');
+      };
+      img.src = '/backgrounds/' + file;
+    }
+
+    function pickAndApply() {
+      fetch('/api/backgrounds')
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (list) {
+          if (!Array.isArray(list) || list.length === 0) return;
+          var file = list[Math.floor(Math.random() * list.length)];
+          apply(file, true);         // persist once the image has loaded
+        })
+        .catch(function () { /* no background on failure */ });
+    }
+
+    var stored = null;
+    try { stored = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) { stored = null; }
+
+    if (stored && stored.file && typeof stored.chosenAt === 'number'
+        && Date.now() - stored.chosenAt < MAX_AGE) {
+      apply(stored.file, false);     // reuse: < 5 min old, keep original chosenAt
+    } else {
+      pickAndApply();                // new session, or 5+ min old -> re-roll
+    }
+  })();
+  </script>
 </body>
 </html>
