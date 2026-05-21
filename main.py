@@ -22,7 +22,9 @@ from esi import (
     get_character_location, get_character_online, get_character_ship,
     get_character_contracts, get_character_fleet,
     get_fleet_info, get_fleet_members, get_fleet_wings, move_fleet_member,
-    get_corp_contracts, get_corp_projects, get_corp_project_contributors,
+    get_corp_contracts, get_corp_contract_items, get_ship_type_ids,
+    get_jita_prices,
+    get_corp_projects, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_group_info, get_system_info, get_server_status,
@@ -45,6 +47,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+BACKGROUNDS_DIR = os.path.join(os.path.dirname(__file__), "static", "backgrounds")
+_BG_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
 
 async def get_current_character_id(session: str | None = Cookie(None)) -> int:
@@ -97,6 +102,16 @@ async def server_status():
         "version": s.get("server_version"),
         "start_time": s.get("start_time"),
     }
+
+
+@app.get("/api/backgrounds")
+async def list_backgrounds():
+    """Return the sorted list of available background image filenames."""
+    try:
+        names = os.listdir(BACKGROUNDS_DIR)
+    except FileNotFoundError:
+        return []
+    return sorted(n for n in names if n.lower().endswith(_BG_EXTS))
 
 
 @app.get("/api/auth/login")
@@ -180,7 +195,7 @@ def _build_fleet_tree(members: list, wings: list, names: dict) -> dict:
 
     fc = next((m for m in members if m.get("role") == "fleet_commander"), None)
     wings_out = []
-    for w in wings:
+    for w in sorted(wings, key=lambda w: w["id"]):
         wc = next((m for m in members
                    if m.get("role") == "wing_commander" and m.get("wing_id") == w["id"]),
                   None)
@@ -548,7 +563,43 @@ async def contracts(session: str | None = Cookie(None)):
         if c.get("acceptor_id"):
             c["acceptor_name"] = char_names.get(c["acceptor_id"])
 
-    return {"hauling": hauling, "abyssal": abyssal, "others": others}
+    await _enrich_contract_icons(others + abyssal, CORP_ID, access_token)
+    ships, others = _split_ship_contracts(others)
+
+    return {"ships": ships, "hauling": hauling,
+            "abyssal": abyssal, "others": others}
+
+
+@app.get("/api/contracts/{contract_id}/detail")
+async def contract_detail(contract_id: int, session: str | None = Cookie(None)):
+    """Items of a contract with Jita 4-4 buy/sell and totals, for the popup.
+    Best-effort: enrichment failures degrade to nulls, never an error."""
+    character_id = await get_current_character_id(session)
+    access_token = await get_valid_token(character_id)
+
+    if contract_id in _contract_items_cache:
+        items = _contract_items_cache[contract_id]
+    else:
+        items, _ = await _safe(
+            get_corp_contract_items(CORP_ID, contract_id, access_token))
+        if items is not None:
+            _contract_items_cache[contract_id] = items
+    if items is None:
+        items = []
+
+    included_type_ids = {it.get("type_id") for it in items
+                         if it.get("is_included")}
+    included_type_ids.discard(None)
+
+    ship_type_ids, type_infos, price_list = await asyncio.gather(
+        get_ship_type_ids(),
+        asyncio.gather(*[get_type_info(t) for t in included_type_ids]),
+        asyncio.gather(*[_cached_jita_prices(t) for t in included_type_ids]),
+    )
+    names  = {t: info.get("name") for t, info in zip(included_type_ids, type_infos)}
+    prices = dict(zip(included_type_ids, price_list))
+
+    return _build_contract_detail(items, names, prices, ship_type_ids)
 
 
 @app.get("/api/projects")
@@ -915,6 +966,111 @@ def _classify_contract(c: dict, now: datetime) -> dict:
             "attention": None, "time_left_sec": None}
 
 
+def _select_contract_icon_type_id(items: list, ship_type_ids: set) -> int | None:
+    """Pick the type_id whose icon represents a contract's contents.
+    Ship (first found) > the sole item > highest-quantity item. Only
+    `is_included` items count; ties on quantity keep list order."""
+    included = [i for i in items if i.get("is_included")]
+    if not included:
+        return None
+    for i in included:
+        if i.get("type_id") in ship_type_ids:
+            return i["type_id"]
+    if len(included) == 1:
+        return included[0].get("type_id")
+    return max(included, key=lambda i: i.get("quantity") or 0).get("type_id")
+
+
+# Contract contents are immutable, so items are cached per contract_id for the
+# process lifetime — a contract is fetched from ESI at most once.
+_contract_items_cache: dict[int, list] = {}
+
+
+async def _enrich_contract_icons(contracts: list, corp_id: int, access_token: str):
+    """Attach `icon_type_id` to item_exchange/auction contracts. Best-effort:
+    a failed item fetch leaves the contract without an icon and never raises."""
+    targets = [c for c in contracts
+               if c.get("type") in ("item_exchange", "auction")]
+    if not targets:
+        return
+    ship_type_ids = await get_ship_type_ids()
+
+    async def _items(cid):
+        if cid in _contract_items_cache:
+            return _contract_items_cache[cid]
+        items, _ = await _safe(get_corp_contract_items(corp_id, cid, access_token))
+        if items is not None:
+            _contract_items_cache[cid] = items
+        return items
+
+    fetched = await asyncio.gather(*[_items(c["contract_id"]) for c in targets])
+    for c, items in zip(targets, fetched):
+        if items is None:
+            c["icon_type_id"] = None
+            c["is_ship"] = False
+            continue
+        c["icon_type_id"] = _select_contract_icon_type_id(items, ship_type_ids)
+        c["is_ship"] = any(
+            i.get("type_id") in ship_type_ids
+            for i in items if i.get("is_included"))
+
+
+def _split_ship_contracts(others: list) -> tuple[list, list]:
+    """Partition non-courier/auction contracts into (ships, rest). A contract
+    is a ship contract when it has an included ship item — flagged as
+    `is_ship` during icon enrichment. Order within each group is preserved."""
+    ships = [c for c in others if c.get("is_ship")]
+    rest  = [c for c in others if not c.get("is_ship")]
+    return ships, rest
+
+
+# Jita 4-4 prices change often; cache per type for 10 min to bound ESI load.
+_jita_price_cache: dict[int, tuple[float, dict]] = {}
+JITA_PRICE_TTL = 600
+
+
+async def _cached_jita_prices(type_id: int) -> dict:
+    cached = _jita_price_cache.get(type_id)
+    if cached and (time.time() - cached[0]) < JITA_PRICE_TTL:
+        return cached[1]
+    prices = await get_jita_prices(type_id)
+    _jita_price_cache[type_id] = (time.time(), prices)
+    return prices
+
+
+def _build_contract_detail(items: list, names: dict, prices: dict,
+                           ship_type_ids: set) -> dict:
+    """Assemble the popup payload from a contract's items. Only `is_included`
+    items count. Line/summary totals skip a missing (None) unit price."""
+    out, buy_sum, sell_sum = [], 0, 0
+    for it in items:
+        if not it.get("is_included"):
+            continue
+        tid = it.get("type_id")
+        qty = it.get("quantity") or 0
+        p = prices.get(tid) or {}
+        buy, sell = p.get("buy"), p.get("sell")
+        buy_total = buy * qty if buy is not None else None
+        sell_total = sell * qty if sell is not None else None
+        if buy_total is not None:
+            buy_sum += buy_total
+        if sell_total is not None:
+            sell_sum += sell_total
+        out.append({
+            "type_id": tid,
+            "name": names.get(tid, f"Type #{tid}"),
+            "quantity": qty,
+            "buy": buy, "sell": sell,
+            "buy_total": buy_total, "sell_total": sell_total,
+        })
+    hero_id = _select_contract_icon_type_id(items, ship_type_ids)
+    return {
+        "items": out,
+        "totals": {"buy": buy_sum, "sell": sell_sum},
+        "hero": {"type_id": hero_id, "is_ship": hero_id in ship_type_ids},
+    }
+
+
 async def _safe(coro):
     """Run an ESI coroutine; return (result, error_string). Never raises."""
     try:
@@ -974,6 +1130,7 @@ async def member(session: str | None = Cookie(None)):
         )
         skills_summary = {
             "total_sp": skills.get("total_sp", 0),
+            "unallocated_sp": skills.get("unallocated_sp", 0),
             "training_active": training_active,
             "coverage": await _build_skill_coverage(skills),
         }
