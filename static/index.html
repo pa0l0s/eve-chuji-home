@@ -1870,8 +1870,11 @@
       renderProjects(await r.json());
     } catch {
       showError('projects-error', 'Network error — could not load projects.');
+    } finally {
+      // Always re-arm the 2-min poll. A transient ESI 502 must not kill the
+      // refresh loop, or the error sticks on screen until a manual reload.
+      projectsTimer = setTimeout(loadProjects, 120000);
     }
-    projectsTimer = setTimeout(loadProjects, 120000);
   }
 
   function showProjectTab(tab) {
