@@ -446,8 +446,10 @@ async def admin_set_project_setting(body: dict, _admin: int = Depends(require_ad
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="name required")
-    excluded = bool(body.get("excluded", True))
-    await database.set_project_price_excluded(name, excluded)
+    if "excluded" in body:
+        await database.set_project_price_excluded(name, bool(body["excluded"]))
+    if "special" in body:
+        await database.set_project_special(name, bool(body["special"]))
     return {"ok": True}
 
 

@@ -28,3 +28,48 @@ async def test_special_and_price_excluded_are_independent():
     settings = {s["project_name"]: s for s in await list_project_settings()}
     assert settings["Armor Remote Repair"]["special"] == 1
     assert settings["Armor Remote Repair"]["price_excluded"] == 0
+
+
+import time
+
+from db import upsert_token
+from auth import make_session_cookie
+
+
+async def _admin_cookie(character_id: int = 777) -> dict:
+    await upsert_token(
+        character_id=character_id, character_name="Admin Pilot",
+        access_token="acc", refresh_token="ref",
+        expires_at=time.time() + 1200, corporation_id=98340844,
+    )
+    return {"session": make_session_cookie(character_id)}
+
+
+async def test_admin_set_special_requires_admin(client):
+    cookies = await _admin_cookie(555)  # not in ADMIN_CHARACTER_IDS
+    r = await client.post("/api/admin/projects/settings",
+                          json={"name": "Armor Remote Repair", "special": True},
+                          cookies=cookies)
+    assert r.status_code == 403
+
+
+async def test_admin_set_special_flag(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    r = await client.post("/api/admin/projects/settings",
+                          json={"name": "Armor Remote Repair", "special": True},
+                          cookies=cookies)
+    assert r.status_code == 200
+    assert "Armor Remote Repair" in await list_special_projects()
+
+
+async def test_admin_set_special_leaves_price_excluded(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    await client.post("/api/admin/projects/settings",
+                      json={"name": "P1", "excluded": True}, cookies=cookies)
+    await client.post("/api/admin/projects/settings",
+                      json={"name": "P1", "special": True}, cookies=cookies)
+    settings = {s["project_name"]: s for s in await list_project_settings()}
+    assert settings["P1"]["price_excluded"] == 1
+    assert settings["P1"]["special"] == 1
