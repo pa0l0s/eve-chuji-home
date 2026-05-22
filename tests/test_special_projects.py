@@ -73,3 +73,48 @@ async def test_admin_set_special_leaves_price_excluded(client, monkeypatch):
     settings = {s["project_name"]: s for s in await list_project_settings()}
     assert settings["P1"]["price_excluded"] == 1
     assert settings["P1"]["special"] == 1
+
+
+import respx
+from httpx import Response
+
+CORP = "98340844"  # conftest sets CORP_ID=98340844
+PROJECTS_URL = f"https://esi.evetech.net/corporations/{CORP}/projects"
+IDS_URL = "https://esi.evetech.net/latest/universe/ids/"
+
+
+def _contrib_url(project_id: str) -> str:
+    return f"https://esi.evetech.net/corporations/{CORP}/projects/{project_id}/contributors"
+
+
+@respx.mock
+async def test_project_contributors_endpoint_caches(client):
+    route = respx.get(_contrib_url("p1")).mock(return_value=Response(200, json={
+        "contributors": [{"id": 1, "name": "Alice", "contributed": 10}],
+    }))
+    cookies = await _admin_cookie(777)
+    await client.get("/api/projects/p1/contributors", cookies=cookies)
+    await client.get("/api/projects/p1/contributors", cookies=cookies)
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_projects_marks_special_and_top_contributors(client):
+    await set_project_special("Armor Remote Repair", True)
+    respx.get(PROJECTS_URL).mock(return_value=Response(200, json={"projects": [
+        {"id": "p1", "name": "Armor Remote Repair", "state": "Active",
+         "progress": {"current": 5, "desired": 10}},
+    ]}))
+    respx.post(IDS_URL).mock(return_value=Response(200, json={}))
+    respx.get(_contrib_url("p1")).mock(return_value=Response(200, json={"contributors": [
+        {"id": 1, "name": "Alice", "contributed": 100},
+        {"id": 2, "name": "Bob", "contributed": 300},
+        {"id": 3, "name": "Carol", "contributed": 50},
+        {"id": 4, "name": "Dave", "contributed": 200},
+    ]}))
+    cookies = await _admin_cookie(777)
+    r = await client.get("/api/projects", cookies=cookies)
+    assert r.status_code == 200
+    proj = next(p for p in r.json()["active"] if p["name"] == "Armor Remote Repair")
+    assert proj["special"] is True
+    assert [c["name"] for c in proj["top_contributors"]] == ["Bob", "Dave", "Alice"]

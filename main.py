@@ -604,6 +604,20 @@ async def contract_detail(contract_id: int, session: str | None = Cookie(None)):
     return _build_contract_detail(items, names, prices, ship_type_ids)
 
 
+# Project contributors change slowly; cache per project for 10 min.
+_contributors_cache: dict[str, tuple[float, list]] = {}
+CONTRIBUTORS_TTL = 600
+
+
+async def _cached_project_contributors(project_id: str, access_token: str) -> list:
+    cached = _contributors_cache.get(project_id)
+    if cached and (time.time() - cached[0]) < CONTRIBUTORS_TTL:
+        return cached[1]
+    contribs = await get_corp_project_contributors(CORP_ID, project_id, access_token)
+    _contributors_cache[project_id] = (time.time(), contribs)
+    return contribs
+
+
 @app.get("/api/projects")
 async def projects(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
@@ -662,9 +676,27 @@ async def projects(session: str | None = Cookie(None)):
             print(f"Market enrichment failed for project {p.get('name')!r}: {e}")
 
     excluded_names = await database.list_excluded_projects()
+    special_names = await database.list_special_projects()
     for p in active + closed:
         _compute_project_warn(p, excluded_names)
         p["sort_priority"] = _project_priority(p)
+        p["special"] = (p.get("name") or "") in special_names
+
+    # Special projects show their top 3 contributors on the card — best-effort,
+    # so a contributor-fetch failure never breaks the projects list.
+    special_projects = [p for p in active + closed if p["special"]]
+    if special_projects:
+        contrib_results = await asyncio.gather(*[
+            _safe(_cached_project_contributors(p["id"], access_token))
+            for p in special_projects
+        ])
+        for p, (contribs, _err) in zip(special_projects, contrib_results):
+            if contribs:
+                top = sorted(contribs, key=lambda c: c.get("contributed") or 0,
+                             reverse=True)[:3]
+                p["top_contributors"] = [
+                    {"id": c.get("id"), "name": c.get("name") or ""} for c in top
+                ]
 
     return {
         "active": active,
@@ -813,7 +845,7 @@ async def project_contributors(project_id: str, session: str | None = Cookie(Non
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        contributors = await get_corp_project_contributors(CORP_ID, project_id, access_token)
+        contributors = await _cached_project_contributors(project_id, access_token)
     except httpx.HTTPStatusError as e:
         print(f"ESI project contributors HTTP {e.response.status_code}: {e.response.text}")
         if e.response.status_code == 403:
