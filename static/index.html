@@ -1952,6 +1952,17 @@
           <span>${fmtISK(m.jita_buy_max)} ISK/u</span>
         </div>
       </div>` : '';
+    const specialContribs = (p.special && p.top_contributors && p.top_contributors.length)
+      ? `<div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.4rem">
+           ${p.top_contributors.map(c => `
+             <div style="display:flex;align-items:center;gap:0.5rem">
+               <img src="https://images.evetech.net/characters/${c.id}/portrait?size=64"
+                    alt="" style="width:28px;height:28px;border-radius:50%;background:#252a3d;flex:0 0 auto">
+               <span style="color:#e2e8f0;font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto">${escHtml(c.name || 'Unknown')}</span>
+               ${characterZkillLink(c.id)}
+             </div>`).join('')}
+         </div>`
+      : '';
     return `
       <div class="${cardClass}" onclick="openProjectContributors('${p.id}')">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:0.5rem;margin-bottom:0.75rem">
@@ -1965,6 +1976,7 @@
           </div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         </div>
+        ${specialContribs}
         ${reasonsBlock}
         ${reward}
         ${marketBlock}
