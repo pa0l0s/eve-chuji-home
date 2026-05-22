@@ -2674,33 +2674,40 @@
           <input type="checkbox" ${p.price_excluded ? 'checked' : ''}
                  onchange="adminToggleProjectExclusion('${escAttr(p.project_name)}', this.checked)">
         </td>
+        <td style="text-align:center">
+          <input type="checkbox" ${p.special ? 'checked' : ''}
+                 onchange="adminToggleProjectSpecial('${escAttr(p.project_name)}', this.checked)">
+        </td>
         <td>
           <button class="btn-logout" onclick="adminRemoveProjectSetting('${escAttr(p.project_name)}')">Remove</button>
         </td>
       </tr>`).join('') || `
-      <tr><td colspan="3" style="color:#475569;text-align:center;padding:0.75rem 0;font-style:italic">
+      <tr><td colspan="4" style="color:#475569;text-align:center;padding:0.75rem 0;font-style:italic">
         No project settings. Add a project name below.
       </td></tr>`;
     document.getElementById('admin-projects').innerHTML = `
       <div class="card full">
-        <div class="card-title">Project Price Exclusions
-          <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.price_excluded).length} excluded</span>
+        <div class="card-title">Project Settings
+          <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.price_excluded).length} fixed price</span>
+          <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.special).length} special</span>
         </div>
         <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.75rem">
-          Projects listed here can be exempted from the Jita 4-4 price-difference warnings
-          (yellow / red frames). Useful for items with fixed NPC prices or non-market rewards.
+          <b>Fixed Price</b> exempts a project from the Jita 4-4 price-difference warnings.
+          <b>Special</b> shows the top contributors on the project card and the full
+          participant list in its details popup.
         </p>
         <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
-          <input type="text" id="admin-proj-add" placeholder="Project name (e.g. Compressed Gneiss)"
+          <input type="text" id="admin-proj-add" placeholder="Project name (e.g. Armor Remote Repair)"
                  style="flex:1;background:#252a3d;border:1px solid #2d3348;color:#e2e8f0;
                         padding:0.4rem 0.6rem;border-radius:6px;font-size:0.8rem;font-family:inherit"
-                 onkeydown="if(event.key==='Enter') adminAddProjectExclusion()">
-          <button class="btn-action" onclick="adminAddProjectExclusion()">Add</button>
+                 onkeydown="if(event.key==='Enter') adminAddProject()">
+          <button class="btn-action" onclick="adminAddProject()">Add</button>
         </div>
         <table>
           <thead><tr>
             <th>Project Name</th>
-            <th style="text-align:center;width:120px">Price Excluded</th>
+            <th style="text-align:center;width:110px">Fixed Price</th>
+            <th style="text-align:center;width:90px">Special</th>
             <th style="width:100px"></th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -2708,7 +2715,7 @@
       </div>`;
   }
 
-  async function adminAddProjectExclusion() {
+  async function adminAddProject() {
     const input = document.getElementById('admin-proj-add');
     const name = input.value.trim();
     if (!name) return;
@@ -2716,7 +2723,7 @@
       const r = await fetch('/api/admin/projects/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, excluded: true }),
+        body: JSON.stringify({ name, excluded: false }),
       });
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
@@ -2725,6 +2732,17 @@
       }
       input.value = '';
       loadAdminProjects();
+    } catch { showError('admin-error', 'Network error.'); }
+  }
+
+  async function adminToggleProjectSpecial(name, special) {
+    try {
+      const r = await fetch('/api/admin/projects/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, special }),
+      });
+      if (!r.ok) showError('admin-error', 'Toggle failed.');
     } catch { showError('admin-error', 'Network error.'); }
   }
 
