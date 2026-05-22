@@ -81,6 +81,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS project_settings (
                 project_name   TEXT PRIMARY KEY,
                 price_excluded INTEGER DEFAULT 0,
+                special        INTEGER DEFAULT 0,
                 updated_at     REAL NOT NULL
             )
         """)
@@ -91,6 +92,13 @@ async def init_db():
                 fetched_at REAL NOT NULL
             )
         """)
+        # Migration: add `special` to project_settings on pre-existing DBs.
+        async with db.execute("PRAGMA table_info(project_settings)") as cur:
+            _cols = {r[1] for r in await cur.fetchall()}
+        if "special" not in _cols:
+            await db.execute(
+                "ALTER TABLE project_settings ADD COLUMN special INTEGER DEFAULT 0")
+
         # One-time seed of NPC-priced project names — only when table is empty,
         # so admin edits stick across restarts.
         async with db.execute("SELECT COUNT(*) FROM project_settings") as cur:
@@ -252,7 +260,7 @@ async def list_project_settings() -> list[dict]:
     async with aiosqlite.connect(_db_path()) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT project_name, price_excluded, updated_at "
+            "SELECT project_name, price_excluded, special, updated_at "
             "FROM project_settings ORDER BY project_name"
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
@@ -274,6 +282,26 @@ async def delete_project_setting(name: str):
     async with aiosqlite.connect(_db_path()) as db:
         await db.execute(
             "DELETE FROM project_settings WHERE project_name = ?", (name,))
+        await db.commit()
+
+
+async def list_special_projects() -> set[str]:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT project_name FROM project_settings WHERE special = 1"
+        ) as cur:
+            return {r[0] for r in await cur.fetchall()}
+
+
+async def set_project_special(name: str, special: bool):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            """INSERT INTO project_settings (project_name, special, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(project_name) DO UPDATE SET
+                 special    = excluded.special,
+                 updated_at = excluded.updated_at""",
+            (name, 1 if special else 0, time.time()))
         await db.commit()
 
 
