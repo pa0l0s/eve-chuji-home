@@ -2038,7 +2038,43 @@
         ${rewardLine}
       </div>`;
 
-    return header + renderContributorPie(sorted, totalContributed);
+    return header + renderContributorPie(sorted, totalContributed)
+         + (project.special ? renderContributorList(sorted, totalContributed) : '');
+  }
+
+  // Full ranked participant list — shown below the pie for special projects.
+  function renderContributorList(sorted, total) {
+    const rows = sorted.map((c, i) => {
+      const pct = total > 0 ? (c.contributed / total * 100) : 0;
+      const isoLast = c.last_modified ? new Date(c.last_modified).toLocaleDateString() : '';
+      return `
+        <div style="display:grid;grid-template-columns:24px 36px 1fr auto;gap:0.75rem;
+                    align-items:center;padding:0.5rem 0;border-bottom:1px solid #1a1e2e">
+          <span style="color:#475569;font-size:0.75rem;text-align:right;font-variant-numeric:tabular-nums">${i + 1}</span>
+          <img src="https://images.evetech.net/characters/${c.id}/portrait?size=64"
+               alt="" style="width:32px;height:32px;border-radius:50%;background:#252a3d">
+          <div style="min-width:0">
+            <div style="color:#e2e8f0;font-weight:500;display:flex;align-items:center;gap:0.4rem">
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.name || 'Unknown')}</span>
+              ${characterZkillLink(c.id)}
+            </div>
+            <div style="height:4px;background:#252a3d;border-radius:2px;margin-top:0.3rem;overflow:hidden">
+              <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
+            </div>
+            ${isoLast ? `<div style="font-size:0.65rem;color:#475569;margin-top:0.15rem">last contribution ${isoLast}</div>` : ''}
+          </div>
+          <div style="text-align:right">
+            <div style="color:#38bdf8;font-weight:600;font-size:0.85rem">${fmtNum(c.contributed)}</div>
+            <div style="color:#64748b;font-size:0.7rem">${pct.toFixed(1)}%</div>
+          </div>
+        </div>`;
+    }).join('');
+    return `
+      <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #2d3348">
+        <div style="font-size:0.7rem;font-weight:600;color:#64748b;text-transform:uppercase;
+                    letter-spacing:0.08em;margin-bottom:0.5rem">All participants</div>
+        ${rows}
+      </div>`;
   }
 
   const PIE_COLORS = ['#38bdf8', '#4ade80', '#fbbf24', '#f87171', '#a78bfa',
