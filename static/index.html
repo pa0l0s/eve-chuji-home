@@ -2710,6 +2710,18 @@
       const r = await fetch('/api/admin/projects/settings');
       if (!r.ok) return;
       renderAdminProjects(await r.json());
+      // Best-effort: populate the autocomplete after the DOM exists. A failure
+      // here must not break the admin panel — the input still works as plain
+      // text without suggestions.
+      try {
+        const ar = await fetch('/api/admin/projects/available');
+        if (!ar.ok) return;
+        const { names = [] } = await ar.json();
+        const dl = document.getElementById('admin-proj-names');
+        if (dl) {
+          dl.innerHTML = names.map(n => `<option value="${escAttr(n)}">`).join('');
+        }
+      } catch {}
     } catch {}
   }
 
@@ -2752,9 +2764,11 @@
         </p>
         <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
           <input type="text" id="admin-proj-add" placeholder="Project name (e.g. Armor Remote Repair)"
+                 list="admin-proj-names" autocomplete="off"
                  style="flex:1;background:#252a3d;border:1px solid #2d3348;color:#e2e8f0;
                         padding:0.4rem 0.6rem;border-radius:6px;font-size:0.8rem;font-family:inherit"
                  onkeydown="if(event.key==='Enter') adminAddProject()">
+          <datalist id="admin-proj-names"></datalist>
           <button class="btn-action" onclick="adminAddProject()">Add</button>
         </div>
         <table>
