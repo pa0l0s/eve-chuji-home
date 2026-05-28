@@ -100,6 +100,21 @@ async def init_db():
                 cached_at  REAL NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS pvp_income_entries (
+                character_id INTEGER NOT NULL,
+                journal_id   INTEGER NOT NULL,
+                date         TEXT    NOT NULL,
+                amount       REAL    NOT NULL,
+                reason       TEXT,
+                description  TEXT,
+                PRIMARY KEY (character_id, journal_id)
+            )
+        """)
+        await db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_pvp_income_char_date
+            ON pvp_income_entries (character_id, date DESC)
+        """)
         # Migrations: add new columns on pre-existing DBs.
         async with db.execute("PRAGMA table_info(project_settings)") as cur:
             _cols = {r[1] for r in await cur.fetchall()}
@@ -580,3 +595,55 @@ async def cache_project_created_batch(items: list[tuple[str, str]]) -> None:
             [(pid, c, now) for (pid, c) in items],
         )
         await db.commit()
+
+
+async def upsert_pvp_entries_batch(character_id: int, entries: list[dict]) -> None:
+    if not entries:
+        return
+    rows = [
+        (character_id, e["id"], e["date"], e["amount"],
+         e.get("reason"), e.get("description"))
+        for e in entries
+    ]
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.executemany(
+            """INSERT INTO pvp_income_entries
+                 (character_id, journal_id, date, amount, reason, description)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(character_id, journal_id) DO NOTHING""",
+            rows,
+        )
+        await db.commit()
+
+
+async def list_pvp_entries_page(
+    character_id: int, limit: int, offset: int
+) -> tuple[list[dict], int]:
+    async with aiosqlite.connect(_db_path()) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT date, amount, reason
+                 FROM pvp_income_entries
+                WHERE character_id = ?
+                ORDER BY date DESC
+                LIMIT ? OFFSET ?""",
+            (character_id, limit, offset),
+        ) as cur:
+            rows = [dict(r) for r in await cur.fetchall()]
+        async with db.execute(
+            "SELECT COUNT(*) FROM pvp_income_entries WHERE character_id = ?",
+            (character_id,),
+        ) as cur:
+            (total,) = await cur.fetchone()
+    return rows, total
+
+
+async def sum_pvp_entries(character_id: int) -> float:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM pvp_income_entries "
+            "WHERE character_id = ?",
+            (character_id,),
+        ) as cur:
+            (total,) = await cur.fetchone()
+    return float(total)
