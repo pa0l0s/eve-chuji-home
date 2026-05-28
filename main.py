@@ -642,12 +642,15 @@ _pvp_income_cache: dict[int, tuple[float, float]] = {}  # cid -> (cached_at, amo
 _PVP_INCOME_TTL = 300.0
 
 
-def _sum_pvp_income(journal: list[dict]) -> float:
-    return sum(
-        e.get("amount", 0) for e in journal
-        if e.get("ref_type") == "corporation_account_withdrawal"
+def _is_pvp_entry(e: dict) -> bool:
+    return (
+        e.get("ref_type") == "corporation_account_withdrawal"
         and "Cerberus Agnon" in (e.get("description") or "")
     )
+
+
+def _sum_pvp_income(journal: list[dict]) -> float:
+    return sum(e.get("amount", 0) for e in journal if _is_pvp_entry(e))
 
 
 async def _cached_pvp_income(character_id: int, access_token: str) -> float:
@@ -656,7 +659,10 @@ async def _cached_pvp_income(character_id: int, access_token: str) -> float:
     if hit and (now - hit[0]) < _PVP_INCOME_TTL:
         return hit[1]
     journal = await get_character_wallet_journal(character_id, access_token)
-    amount = _sum_pvp_income(journal)
+    matches = [e for e in journal if _is_pvp_entry(e)]
+    if matches:
+        await database.upsert_pvp_entries_batch(character_id, matches)
+    amount = sum(e.get("amount", 0) for e in matches)
     _pvp_income_cache[character_id] = (now, amount)
     return amount
 

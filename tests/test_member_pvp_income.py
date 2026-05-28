@@ -42,30 +42,41 @@ async def test_journal_stops_on_empty_page():
 SAMPLE_JOURNAL = [
     {
         "id": 1, "amount": 371_000_000,
+        "date": "2026-05-01T00:00:00Z",
         "ref_type": "corporation_account_withdrawal",
         "description": "Cerberus Agnon transferred cash from corp account to player",
     },
     {
         "id": 2, "amount": 50_000_000,
+        "date": "2026-05-02T00:00:00Z",
         "ref_type": "corporation_account_withdrawal",
         "description": "Cerberus Agnon transferred cash again",
     },
     {
         "id": 3, "amount": 99_999,
+        "date": "2026-05-03T00:00:00Z",
         "ref_type": "corporation_account_withdrawal",
         "description": "Someone Else transferred cash",
     },
     {
         "id": 4, "amount": 1,
+        "date": "2026-05-04T00:00:00Z",
         "ref_type": "player_donation",
         "description": "Gift from Cerberus Agnon",
     },
     {
         "id": 5, "amount": 7,
+        "date": "2026-05-05T00:00:00Z",
         "ref_type": "corporation_account_withdrawal",
         "description": None,
     },
 ]
+
+
+@pytest.fixture(autouse=True)
+async def _db(set_env):
+    from db import init_db
+    await init_db()
 
 
 @pytest.fixture(autouse=True)

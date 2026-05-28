@@ -102,3 +102,85 @@ async def test_per_character_isolation():
     rows_b, total_b = await list_pvp_entries_page(999, limit=10, offset=0)
     assert total_a == 1 and rows_a[0]["amount"] == 100.0
     assert total_b == 1 and rows_b[0]["amount"] == 5.0
+
+
+import respx
+from httpx import Response
+
+
+JOURNAL_URL = f"https://esi.evetech.net/latest/characters/{CID}/wallet/journal/"
+
+
+SAMPLE_JOURNAL = [
+    {
+        "id": 11, "amount": 100.0,
+        "date": "2026-05-01T00:00:00Z",
+        "ref_type": "corporation_account_withdrawal",
+        "description": "Cerberus Agnon transferred cash to player",
+        "reason": "Astrahus",
+    },
+    {
+        "id": 12, "amount": 200.0,
+        "date": "2026-05-02T00:00:00Z",
+        "ref_type": "corporation_account_withdrawal",
+        "description": "Cerberus Agnon transferred cash again",
+        "reason": "PVP",
+    },
+    {
+        "id": 13, "amount": 999.0,
+        "date": "2026-05-03T00:00:00Z",
+        "ref_type": "player_donation",
+        "description": "From Cerberus Agnon",
+        "reason": "Gift",
+    },
+    {
+        "id": 14, "amount": 999.0,
+        "date": "2026-05-04T00:00:00Z",
+        "ref_type": "corporation_account_withdrawal",
+        "description": "Someone Else transferred cash",
+        "reason": "x",
+    },
+]
+
+
+@pytest.fixture(autouse=True)
+def _main_module(set_env):
+    import main
+    main._pvp_income_cache.clear()
+    yield main
+    main._pvp_income_cache.clear()
+
+
+@respx.mock
+async def test_cached_pvp_income_persists_only_matching_entries(_main_module):
+    respx.get(JOURNAL_URL).mock(return_value=Response(
+        200, json=SAMPLE_JOURNAL, headers={"X-Pages": "1"},
+    ))
+    sum_returned = await _main_module._cached_pvp_income(CID, "tok")
+    assert sum_returned == 300.0  # only the two matching entries
+    rows, total = await list_pvp_entries_page(CID, limit=10, offset=0)
+    assert total == 2
+    assert {int(r["amount"]) for r in rows} == {100, 200}
+
+
+@respx.mock
+async def test_cached_pvp_income_cache_hit_skips_db_write(_main_module):
+    import time
+    _main_module._pvp_income_cache[CID] = (time.time(), 42.0)
+    result = await _main_module._cached_pvp_income(CID, "tok")
+    assert result == 42.0
+    rows, total = await list_pvp_entries_page(CID, limit=10, offset=0)
+    assert total == 0  # cache hit did not write anything
+
+
+@respx.mock
+async def test_cached_pvp_income_persists_idempotently(_main_module):
+    respx.get(JOURNAL_URL).mock(return_value=Response(
+        200, json=SAMPLE_JOURNAL, headers={"X-Pages": "1"},
+    ))
+    await _main_module._cached_pvp_income(CID, "tok")
+    cached_at, amount = _main_module._pvp_income_cache[CID]
+    _main_module._pvp_income_cache[CID] = (cached_at - 301, amount)
+    await _main_module._cached_pvp_income(CID, "tok")
+    _, total = await list_pvp_entries_page(CID, limit=10, offset=0)
+    assert total == 2
