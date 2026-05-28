@@ -3021,7 +3021,7 @@
         <div class="skeleton" style="height:100px"></div></div>
       <div class="card"><div class="card-title">Location &amp; Ship</div>
         <div class="skeleton" style="height:100px"></div></div>
-      <div class="card"><div class="card-title">Financials &amp; Skills</div>
+      <div class="card"><div class="card-title">Skills</div>
         <div class="skeleton" style="height:100px"></div></div>
       <div class="card full"><div class="card-title">Your Contracts</div>
         <div class="skeleton" style="height:60px"></div></div>`;
@@ -3050,7 +3050,7 @@
     grid.innerHTML = `
       ${renderCharacterCard(m)}
       ${renderLocationShipCard(m)}
-      ${renderFinancialsCard(m)}
+      ${renderSkillsCard(m)}
       ${renderAttributesCard(m)}
       ${renderSkillQueueCard(m)}
       ${renderSkillCoverageCard(m)}
@@ -3089,8 +3089,12 @@
   function renderCharacterCard(m) {
     const charErr = sectionError(m.profile);
     const onlineErr = sectionError(m.online);
+    const walletErr = sectionError(m.wallet);
+    const pvpErr = sectionError(m.pvp_income);
     const p = sectionData(m.profile);
     const o = sectionData(m.online);
+    const wallet = sectionData(m.wallet);
+    const pvp = sectionData(m.pvp_income);
     if (charErr && !p) {
       return `<div class="card"><div class="card-title">Character</div>${cardErrorBlock(charErr)}</div>`;
     }
@@ -3100,6 +3104,40 @@
       ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;margin-right:0.4rem"></span>'
       : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#475569;margin-right:0.4rem"></span>';
     const onlineLabel = onlineErr ? 'Online status unavailable' : (o?.is_online ? 'Online' : 'Offline');
+
+    const w = walletDisplay(wallet);
+    const walletCell = walletErr
+      ? `<div class="metric"><div class="label">Wallet Balance</div><div class="val">–</div></div>`
+      : `<div class="metric">
+           <div class="label">Wallet Balance</div>
+           <div class="val ${w.sizeCls}" title="${w.tooltip}">
+             ${w.value}<span class="unit">ISK</span>
+           </div>
+         </div>`;
+    const pvpView = walletDisplay(pvp);
+    const pvpCell = pvpErr
+      ? `<div class="metric"><div class="label">PVP Income (30d)</div><div class="val">–</div></div>`
+      : `<div class="metric">
+           <div class="label">PVP Income (30d)</div>
+           <div class="val ${pvpView.sizeCls}" title="Corp Account Withdrawal from Cerberus Agnon, last 30 days">
+             ${pvpView.value}<span class="unit">ISK</span>
+           </div>
+         </div>`;
+    const lastLoginCell = `
+      <div class="metric">
+        <div class="label">Last Login</div>
+        <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
+          ${o?.last_login ? new Date(o.last_login).toLocaleString() : '–'}
+        </div>
+      </div>`;
+    const totalLoginsCell = `
+      <div class="metric">
+        <div class="label">Total Logins</div>
+        <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
+          ${o?.logins != null ? fmtNum(o.logins) : '–'}
+        </div>
+      </div>`;
+
     return `
       <div class="card">
         <div class="card-title">Character</div>
@@ -3119,6 +3157,12 @@
               ${onlineDot}${onlineLabel}
             </div>
           </div>
+        </div>
+        <div class="metrics" style="margin-top:0.75rem">
+          ${walletCell}
+          ${pvpCell}
+          ${lastLoginCell}
+          ${totalLoginsCell}
         </div>
       </div>`;
   }
@@ -3179,22 +3223,9 @@
     </div>`;
   }
 
-  function renderFinancialsCard(m) {
-    const walletErr = sectionError(m.wallet);
+  function renderSkillsCard(m) {
     const skillsErr = sectionError(m.skills);
-    const wallet = sectionData(m.wallet);
     const skills = sectionData(m.skills);
-    const online = sectionData(m.online);
-
-    const w = walletDisplay(wallet);
-    const walletCell = walletErr
-      ? `<div class="metric">${cardErrorBlock(walletErr)}</div>`
-      : `<div class="metric">
-           <div class="label">Wallet Balance</div>
-           <div class="val ${w.sizeCls}" title="${w.tooltip}">
-             ${w.value}<span class="unit">ISK</span>
-           </div>
-         </div>`;
     const usedSp = skills?.total_sp || 0;
     const unusedSp = skills?.unallocated_sp || 0;
     const skillsCell = skillsErr
@@ -3214,27 +3245,11 @@
 
     return `
       <div class="card">
-        <div class="card-title">Financials &amp; Skills</div>
+        <div class="card-title">Skills</div>
         <div class="metrics">
-          ${walletCell}
           ${skillsCell}
           ${unusedSpCell}
           ${totalSpCell}
-        </div>
-        <div style="margin-top:0.75rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;
-                    font-size:0.7rem;color:#64748b">
-          <div>
-            <div style="text-transform:uppercase;letter-spacing:0.06em">Last Login</div>
-            <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
-              ${online?.last_login ? new Date(online.last_login).toLocaleString() : '–'}
-            </div>
-          </div>
-          <div>
-            <div style="text-transform:uppercase;letter-spacing:0.06em">Total Logins</div>
-            <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">
-              ${online?.logins != null ? fmtNum(online.logins) : '–'}
-            </div>
-          </div>
         </div>
       </div>`;
   }
