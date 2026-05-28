@@ -2726,11 +2726,15 @@
           <input type="checkbox" ${p.special ? 'checked' : ''}
                  onchange="adminToggleProjectSpecial('${escAttr(p.project_name)}', this.checked)">
         </td>
+        <td style="text-align:center">
+          <input type="checkbox" ${p.track ? 'checked' : ''}
+                 onchange="adminToggleProjectTrack('${escAttr(p.project_name)}', this.checked)">
+        </td>
         <td>
           <button class="btn-logout" onclick="adminRemoveProjectSetting('${escAttr(p.project_name)}')">Remove</button>
         </td>
       </tr>`).join('') || `
-      <tr><td colspan="4" style="color:#475569;text-align:center;padding:0.75rem 0;font-style:italic">
+      <tr><td colspan="5" style="color:#475569;text-align:center;padding:0.75rem 0;font-style:italic">
         No project settings. Add a project name below.
       </td></tr>`;
     document.getElementById('admin-projects').innerHTML = `
@@ -2738,11 +2742,13 @@
         <div class="card-title">Project Settings
           <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.price_excluded).length} fixed price</span>
           <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.special).length} special</span>
+          <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.track).length} track</span>
         </div>
         <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.75rem">
           <b>Fixed Price</b> exempts a project from the Jita 4-4 price-difference warnings.
           <b>Special</b> shows the top contributors on the project card and the full
           participant list in its details popup.
+          <b>Track</b> pins a project to the top of the Projects page sort order.
         </p>
         <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem">
           <input type="text" id="admin-proj-add" placeholder="Project name (e.g. Armor Remote Repair)"
@@ -2756,6 +2762,7 @@
             <th>Project Name</th>
             <th style="text-align:center;width:110px">Fixed Price</th>
             <th style="text-align:center;width:90px">Special</th>
+            <th style="text-align:center;width:80px">Track</th>
             <th style="width:100px"></th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -2789,6 +2796,17 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, special }),
+      });
+      if (!r.ok) showError('admin-error', 'Toggle failed.');
+    } catch { showError('admin-error', 'Network error.'); }
+  }
+
+  async function adminToggleProjectTrack(name, track) {
+    try {
+      const r = await fetch('/api/admin/projects/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, track }),
       });
       if (!r.ok) showError('admin-error', 'Toggle failed.');
     } catch { showError('admin-error', 'Network error.'); }
