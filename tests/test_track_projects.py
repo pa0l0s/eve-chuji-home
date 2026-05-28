@@ -159,4 +159,4 @@ async def test_admin_available_projects_handles_esi_failure(client, monkeypatch)
     assert r.status_code == 200
     body = r.json()
     assert body["names"] == []
-    assert "error" in body
+    assert body["error"] == "ESI unavailable"
