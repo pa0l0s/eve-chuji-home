@@ -82,6 +82,7 @@ async def init_db():
                 project_name   TEXT PRIMARY KEY,
                 price_excluded INTEGER DEFAULT 0,
                 special        INTEGER DEFAULT 0,
+                track          INTEGER DEFAULT 0,
                 updated_at     REAL NOT NULL
             )
         """)
@@ -92,15 +93,34 @@ async def init_db():
                 fetched_at REAL NOT NULL
             )
         """)
-        # Migration: add `special` to project_settings on pre-existing DBs.
+        # Migrations: add new columns on pre-existing DBs.
         async with db.execute("PRAGMA table_info(project_settings)") as cur:
             _cols = {r[1] for r in await cur.fetchall()}
         if "special" not in _cols:
             await db.execute(
                 "ALTER TABLE project_settings ADD COLUMN special INTEGER DEFAULT 0")
+        if "track" not in _cols:
+            await db.execute(
+                "ALTER TABLE project_settings ADD COLUMN track INTEGER DEFAULT 0")
+            # Seed the two legacy hard-coded Track names on pre-existing DBs.
+            # Runs only when the column was just added, so an admin who later
+            # disables Track on one of these names won't have it re-enabled
+            # on the next boot.
+            _seed_now = time.time()
+            for _name in ("Remote Boost Shield", "Armor Remote Repair"):
+                await db.execute(
+                    """INSERT INTO project_settings (project_name, track, updated_at)
+                       VALUES (?, 1, ?)
+                       ON CONFLICT(project_name) DO UPDATE SET
+                         track      = 1,
+                         updated_at = excluded.updated_at""",
+                    (_name, _seed_now))
 
-        # One-time seed of NPC-priced project names — only when table is empty,
-        # so admin edits stick across restarts.
+        # One-time seed — only when table is empty, so admin edits stick.
+        # Two seed groups:
+        #   - NPC-priced names with price_excluded=1
+        #   - Legacy hard-coded Track names with track=1 (mirrors the
+        #     pre-existing-DB migration in Step 4 above).
         async with db.execute("SELECT COUNT(*) FROM project_settings") as cur:
             row = await cur.fetchone()
             if row and row[0] == 0:
@@ -116,6 +136,10 @@ async def init_db():
                 await db.executemany(
                     "INSERT INTO project_settings (project_name, price_excluded, updated_at) VALUES (?, 1, ?)",
                     [(n, now) for n in defaults],
+                )
+                await db.executemany(
+                    "INSERT INTO project_settings (project_name, track, updated_at) VALUES (?, 1, ?)",
+                    [(n, now) for n in ("Remote Boost Shield", "Armor Remote Repair")],
                 )
         await db.commit()
 
@@ -260,7 +284,7 @@ async def list_project_settings() -> list[dict]:
     async with aiosqlite.connect(_db_path()) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT project_name, price_excluded, special, updated_at "
+            "SELECT project_name, price_excluded, special, track, updated_at "
             "FROM project_settings ORDER BY project_name"
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
@@ -302,6 +326,26 @@ async def set_project_special(name: str, special: bool):
                  special    = excluded.special,
                  updated_at = excluded.updated_at""",
             (name, 1 if special else 0, time.time()))
+        await db.commit()
+
+
+async def list_tracked_projects() -> set[str]:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT project_name FROM project_settings WHERE track = 1"
+        ) as cur:
+            return {r[0] for r in await cur.fetchall()}
+
+
+async def set_project_track(name: str, track: bool):
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.execute(
+            """INSERT INTO project_settings (project_name, track, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(project_name) DO UPDATE SET
+                 track      = excluded.track,
+                 updated_at = excluded.updated_at""",
+            (name, 1 if track else 0, time.time()))
         await db.commit()
 
 
