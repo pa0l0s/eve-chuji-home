@@ -24,7 +24,7 @@ from esi import (
     get_fleet_info, get_fleet_members, get_fleet_wings, move_fleet_member,
     get_corp_contracts, get_corp_contract_items, get_ship_type_ids,
     get_jita_prices, get_market_history,
-    get_corp_projects, get_corp_project_contributors,
+    get_corp_projects, get_corp_project_detail, get_corp_project_contributors,
     get_corp_structures, get_corp_starbases, get_starbase_detail,
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_group_info, get_system_info, get_server_status,
@@ -702,6 +702,34 @@ async def projects(session: str | None = Cookie(None)):
         _compute_project_warn(p, excluded_names)
         p["sort_priority"] = _project_priority(p, tracked_names)
         p["special"] = (p.get("name") or "") in special_names
+
+    # Started-date enrichment: pull `created` from a per-project cache, lazily
+    # filling the cache from the ESI detail endpoint for any project we haven't
+    # seen yet. `created` is immutable per project, so once cached we never
+    # refetch. Best-effort — a failed detail fetch just leaves p["created"] off.
+    created_map = await database.get_cached_project_created_map()
+    missing = [
+        p["id"] for p in active + closed
+        if p.get("id") and p["id"] not in created_map
+    ]
+    if missing:
+        details = await asyncio.gather(*[
+            _safe(get_corp_project_detail(CORP_ID, pid, access_token))
+            for pid in missing
+        ])
+        new_rows: list[tuple[str, str]] = []
+        for pid, (detail, _err) in zip(missing, details):
+            if detail:
+                c = (detail.get("details") or {}).get("created")
+                if c:
+                    created_map[pid] = c
+                    new_rows.append((pid, c))
+        if new_rows:
+            await database.cache_project_created_batch(new_rows)
+    for p in active + closed:
+        pid = p.get("id")
+        if pid and pid in created_map:
+            p["created"] = created_map[pid]
 
     # Special projects show their top 3 contributors on the card — best-effort,
     # so a contributor-fetch failure never breaks the projects list.
