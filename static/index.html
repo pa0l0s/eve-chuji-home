@@ -1987,6 +1987,66 @@
       </div>`;
   }
 
+  async function openPVPIncomeModal(page = 1) {
+    showModal('PVP Income — all-time history',
+      '<div style="color:#475569;text-align:center;padding:1.5rem">Loading…</div>');
+    try {
+      const r = await fetch(`/api/me/pvp-income?page=${page}`);
+      if (!r.ok) {
+        setModalBody(cardErrorBlock(`Failed to load (${r.status})`));
+        return;
+      }
+      const data = await r.json();
+      setModalBody(renderPVPIncomeModal(data));
+    } catch {
+      setModalBody(cardErrorBlock("Couldn't load PVP income — try again."));
+    }
+  }
+
+  function renderPVPIncomeModal(data) {
+    const entries = data.entries || [];
+    const tableBody = entries.length
+      ? entries.map(e => `
+          <tr>
+            <td>${new Date(e.date).toLocaleString()}</td>
+            <td style="text-align:right">${fmtISKLong(e.amount)} ISK</td>
+            <td>${escHtml(e.reason || '–')}</td>
+          </tr>`).join('')
+      : `<tr><td colspan="3" style="color:#475569;text-align:center;padding:1rem">
+           No PVP income recorded yet.
+         </td></tr>`;
+    const prevDisabled = data.page <= 1 ? 'disabled' : '';
+    const nextDisabled = data.page >= data.total_pages ? 'disabled' : '';
+    return `
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+        <thead>
+          <tr style="color:#64748b;text-transform:uppercase;font-size:0.7rem;letter-spacing:0.06em">
+            <th style="text-align:left;padding:0.4rem 0.6rem">Date</th>
+            <th style="text-align:right;padding:0.4rem 0.6rem">Amount</th>
+            <th style="text-align:left;padding:0.4rem 0.6rem">Reason</th>
+          </tr>
+        </thead>
+        <tbody>${tableBody}</tbody>
+        <tfoot>
+          <tr style="color:#94a3b8;font-size:0.8rem;border-top:1px solid #2d3348">
+            <td style="padding:0.5rem 0.6rem" colspan="3">
+              Total over ${fmtNum(data.total_count)} entries: ${fmtISKLong(data.total_amount)} ISK
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+      <div style="display:flex;justify-content:space-between;align-items:center;
+                  margin-top:0.75rem;color:#64748b;font-size:0.75rem">
+        <span>Page ${data.page} of ${data.total_pages}</span>
+        <div style="display:flex;gap:0.4rem">
+          <button class="btn-logout" ${prevDisabled}
+                  onclick="openPVPIncomeModal(${data.page - 1})">Prev</button>
+          <button class="btn-logout" ${nextDisabled}
+                  onclick="openPVPIncomeModal(${data.page + 1})">Next</button>
+        </div>
+      </div>`;
+  }
+
   async function openProjectContributors(projectId) {
     const project = [
       ...(projectsCache?.active || []),
@@ -3117,9 +3177,10 @@
     const pvpView = walletDisplay(pvp);
     const pvpCell = pvpErr
       ? `<div class="metric"><div class="label">PVP Income (30d)</div><div class="val">–</div></div>`
-      : `<div class="metric">
+      : `<div class="metric" style="cursor:pointer" onclick="openPVPIncomeModal()"
+              title="Click for full all-time history">
            <div class="label">PVP Income (30d)</div>
-           <div class="val ${pvpView.sizeCls}" title="Corp Account Withdrawal from Cerberus Agnon, last 30 days">
+           <div class="val ${pvpView.sizeCls}">
              ${pvpView.value}<span class="unit">ISK</span>
            </div>
          </div>`;
