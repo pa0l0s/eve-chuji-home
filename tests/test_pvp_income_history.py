@@ -184,3 +184,82 @@ async def test_cached_pvp_income_persists_idempotently(_main_module):
     await _main_module._cached_pvp_income(CID, "tok")
     _, total = await list_pvp_entries_page(CID, limit=10, offset=0)
     assert total == 2
+
+
+import time
+
+from db import upsert_token
+from auth import make_session_cookie
+
+
+async def _user_cookie(character_id: int = CID) -> dict:
+    await upsert_token(
+        character_id=character_id, character_name="Pilot",
+        access_token="acc", refresh_token="ref",
+        expires_at=time.time() + 1200, corporation_id=98340844,
+    )
+    return {"session": make_session_cookie(character_id)}
+
+
+async def test_pvp_income_endpoint_requires_auth(client):
+    r = await client.get("/api/me/pvp-income")
+    assert r.status_code == 401
+
+
+async def test_pvp_income_endpoint_empty(client):
+    cookies = await _user_cookie()
+    r = await client.get("/api/me/pvp-income", cookies=cookies)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["entries"] == []
+    assert body["total_count"] == 0
+    assert body["total_amount"] == 0
+    assert body["page"] == 1
+    assert body["page_size"] == 20
+    assert body["total_pages"] == 1
+
+
+async def test_pvp_income_endpoint_paged(client):
+    await upsert_pvp_entries_batch(CID, [
+        {"id": i, "date": f"2026-01-{i:02d}T00:00:00Z", "amount": float(i),
+         "reason": f"r{i}", "description": ""}
+        for i in range(1, 26)
+    ])
+    cookies = await _user_cookie()
+
+    r1 = await client.get("/api/me/pvp-income?page=1", cookies=cookies)
+    body1 = r1.json()
+    assert body1["page"] == 1 and body1["page_size"] == 20
+    assert body1["total_count"] == 25 and body1["total_pages"] == 2
+    assert body1["total_amount"] == sum(range(1, 26))
+    assert len(body1["entries"]) == 20
+    assert body1["entries"][0]["amount"] == 25.0
+    assert body1["entries"][-1]["amount"] == 6.0
+    assert set(body1["entries"][0].keys()) == {"date", "amount", "reason"}
+
+    r2 = await client.get("/api/me/pvp-income?page=2", cookies=cookies)
+    body2 = r2.json()
+    assert body2["page"] == 2
+    assert len(body2["entries"]) == 5
+    assert body2["total_amount"] == body1["total_amount"]
+    assert body2["total_count"] == 25
+
+
+async def test_pvp_income_endpoint_out_of_range_page(client):
+    await upsert_pvp_entries_batch(CID, [
+        {"id": 1, "date": "2026-01-01T00:00:00Z", "amount": 5.0,
+         "reason": "", "description": ""},
+    ])
+    cookies = await _user_cookie()
+    r = await client.get("/api/me/pvp-income?page=999", cookies=cookies)
+    body = r.json()
+    assert body["entries"] == []
+    assert body["total_count"] == 1
+    assert body["total_amount"] == 5.0
+    assert body["total_pages"] == 1
+
+
+async def test_pvp_income_endpoint_clamps_negative_page(client):
+    cookies = await _user_cookie()
+    r = await client.get("/api/me/pvp-income?page=-3", cookies=cookies)
+    assert r.json()["page"] == 1

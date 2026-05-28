@@ -1345,6 +1345,26 @@ async def my_wallet(session: str | None = Cookie(None)):
         raise HTTPException(status_code=502, detail="ESI unavailable")
 
 
+@app.get("/api/me/pvp-income")
+async def my_pvp_income(page: int = 1, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    page = max(1, page)
+    page_size = 20
+    entries, total = await database.list_pvp_entries_page(
+        character_id, limit=page_size, offset=(page - 1) * page_size
+    )
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    total_amount = await database.sum_pvp_entries(character_id)
+    return {
+        "entries": entries,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "total_count": total,
+        "total_amount": total_amount,
+    }
+
+
 # Per-character in-memory cache for personal contracts. Short TTL so the
 # Member page feels instant on repeated visits while still picking up new
 # contracts within roughly a minute.
