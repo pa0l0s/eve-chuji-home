@@ -450,6 +450,8 @@ async def admin_set_project_setting(body: dict, _admin: int = Depends(require_ad
         await database.set_project_price_excluded(name, bool(body["excluded"]))
     if "special" in body:
         await database.set_project_special(name, bool(body["special"]))
+    if "track" in body:
+        await database.set_project_track(name, bool(body["track"]))
     return {"ok": True}
 
 

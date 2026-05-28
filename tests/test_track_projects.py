@@ -45,3 +45,51 @@ async def test_seed_does_not_overwrite_after_admin_disable():
     await set_project_track("Armor Remote Repair", False)
     await init_db()
     assert await list_tracked_projects() == {"Remote Boost Shield"}
+
+
+import time
+
+from db import upsert_token
+from auth import make_session_cookie
+
+
+async def _admin_cookie(character_id: int = 777) -> dict:
+    await upsert_token(
+        character_id=character_id, character_name="Admin Pilot",
+        access_token="acc", refresh_token="ref",
+        expires_at=time.time() + 1200, corporation_id=98340844,
+    )
+    return {"session": make_session_cookie(character_id)}
+
+
+async def test_admin_set_track_requires_admin(client):
+    cookies = await _admin_cookie(555)  # not in ADMIN_CHARACTER_IDS
+    r = await client.post("/api/admin/projects/settings",
+                          json={"name": "My Project", "track": True},
+                          cookies=cookies)
+    assert r.status_code == 403
+
+
+async def test_admin_set_track_flag(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    r = await client.post("/api/admin/projects/settings",
+                          json={"name": "My Project", "track": True},
+                          cookies=cookies)
+    assert r.status_code == 200
+    assert "My Project" in await list_tracked_projects()
+
+
+async def test_admin_track_independent_from_other_flags(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    await client.post("/api/admin/projects/settings",
+                      json={"name": "P1", "excluded": True}, cookies=cookies)
+    await client.post("/api/admin/projects/settings",
+                      json={"name": "P1", "special": True}, cookies=cookies)
+    await client.post("/api/admin/projects/settings",
+                      json={"name": "P1", "track": True}, cookies=cookies)
+    settings = {s["project_name"]: s for s in await list_project_settings()}
+    assert settings["P1"]["price_excluded"] == 1
+    assert settings["P1"]["special"] == 1
+    assert settings["P1"]["track"] == 1
