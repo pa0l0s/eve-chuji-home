@@ -1980,8 +1980,9 @@
         ${reasonsBlock}
         ${reward}
         ${marketBlock}
-        <div style="margin-top:0.75rem;font-size:0.7rem;color:#475569">
-          Last modified: ${new Date(p.last_modified).toLocaleDateString()}
+        <div style="margin-top:0.75rem;font-size:0.7rem;color:#475569;display:flex;justify-content:space-between;gap:0.5rem">
+          <span>${p.created ? 'Started: ' + new Date(p.created).toLocaleDateString() : ''}</span>
+          <span>Last modified: ${new Date(p.last_modified).toLocaleDateString()}</span>
         </div>
       </div>`;
   }
