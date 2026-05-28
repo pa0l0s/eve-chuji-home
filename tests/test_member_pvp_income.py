@@ -39,12 +39,6 @@ async def test_journal_stops_on_empty_page():
     assert entries == []
 
 
-import time
-
-import main as main_module
-from main import _sum_pvp_income, _cached_pvp_income
-
-
 SAMPLE_JOURNAL = [
     {
         "id": 1, "amount": 371_000_000,
@@ -74,50 +68,51 @@ SAMPLE_JOURNAL = [
 ]
 
 
-def test_sum_pvp_income_includes_only_matching_entries():
-    assert _sum_pvp_income(SAMPLE_JOURNAL) == 371_000_000 + 50_000_000
+@pytest.fixture(autouse=True)
+def _main_module(set_env):
+    import main
+    main._pvp_income_cache.clear()
+    yield main
+    main._pvp_income_cache.clear()
 
 
-def test_sum_pvp_income_empty():
-    assert _sum_pvp_income([]) == 0
+def test_sum_pvp_income_includes_only_matching_entries(_main_module):
+    assert _main_module._sum_pvp_income(SAMPLE_JOURNAL) == 371_000_000 + 50_000_000
 
 
-def test_sum_pvp_income_none_description_safe():
+def test_sum_pvp_income_empty(_main_module):
+    assert _main_module._sum_pvp_income([]) == 0
+
+
+def test_sum_pvp_income_none_description_safe(_main_module):
     entry_with_none = [{
         "id": 1, "amount": 5,
         "ref_type": "corporation_account_withdrawal",
         "description": None,
     }]
-    assert _sum_pvp_income(entry_with_none) == 0
-
-
-@pytest.fixture(autouse=True)
-def _reset_pvp_cache():
-    main_module._pvp_income_cache.clear()
-    yield
-    main_module._pvp_income_cache.clear()
+    assert _main_module._sum_pvp_income(entry_with_none) == 0
 
 
 @respx.mock
-async def test_cached_pvp_income_caches_within_ttl():
+async def test_cached_pvp_income_caches_within_ttl(_main_module):
     route = respx.get(JOURNAL_URL).mock(return_value=Response(
         200, json=SAMPLE_JOURNAL, headers={"X-Pages": "1"},
     ))
-    first  = await _cached_pvp_income(CID, "tok")
-    second = await _cached_pvp_income(CID, "tok")
+    first  = await _main_module._cached_pvp_income(CID, "tok")
+    second = await _main_module._cached_pvp_income(CID, "tok")
     assert first == 371_000_000 + 50_000_000
     assert second == first
     assert route.call_count == 1
 
 
 @respx.mock
-async def test_cached_pvp_income_refetches_after_ttl():
+async def test_cached_pvp_income_refetches_after_ttl(_main_module):
     route = respx.get(JOURNAL_URL).mock(return_value=Response(
         200, json=SAMPLE_JOURNAL, headers={"X-Pages": "1"},
     ))
-    await _cached_pvp_income(CID, "tok")
-    cached_at, amount = main_module._pvp_income_cache[CID]
-    main_module._pvp_income_cache[CID] = (cached_at - 301, amount)
-    again = await _cached_pvp_income(CID, "tok")
+    await _main_module._cached_pvp_income(CID, "tok")
+    cached_at, amount = _main_module._pvp_income_cache[CID]
+    _main_module._pvp_income_cache[CID] = (cached_at - 301, amount)
+    again = await _main_module._cached_pvp_income(CID, "tok")
     assert again == amount
     assert route.call_count == 2
