@@ -45,34 +45,25 @@ if "track" not in _cols:
         "ALTER TABLE project_settings ADD COLUMN track INTEGER DEFAULT 0")
 ```
 
-Seed the two legacy names with `track=1` **only when the column was just
-added** (i.e. inside the `if "track" not in _cols:` block). Gating on the
-migration is critical — if the seed ran unconditionally on every startup, it
-would re-set `track=1` for those names after an admin disabled the flag,
-making the legacy names effectively un-removable.
+Seed the two legacy names with `track=1` exactly once over the lifetime of
+each DB. Two seed paths, because fresh vs. pre-existing DBs traverse
+different code:
 
-```python
-if "track" not in _cols:
-    await db.execute(
-        "ALTER TABLE project_settings ADD COLUMN track INTEGER DEFAULT 0")
-    now = time.time()
-    for n in ("Remote Boost Shield", "Armor Remote Repair"):
-        await db.execute(
-            """INSERT INTO project_settings (project_name, track, updated_at)
-               VALUES (?, 1, ?)
-               ON CONFLICT(project_name) DO UPDATE SET
-                 track      = 1,
-                 updated_at = excluded.updated_at""",
-            (n, now))
-```
+- **Pre-existing prod DB** (table exists, `track` column missing): inside
+  the `if "track" not in _cols:` block (right after the `ALTER TABLE
+  ... ADD COLUMN track`), UPSERT both names with `track=1`. This block runs
+  exactly once — on the boot that adds the column.
+- **Fresh DB** (table just created): the `track` column exists from
+  `CREATE TABLE`, so the migration block doesn't fire. Instead, extend the
+  existing empty-table seed (`if row[0] == 0`) — which already seeds
+  NPC-priced names with `price_excluded=1` — to also `INSERT` both legacy
+  Track names with `track=1`. The empty-table seed already correctly
+  gates on "no admin edits yet" (the count check).
 
-Behaviour:
-- Fresh DB → column added by migration → seed runs → legacy names get
-  `track=1`.
-- Existing prod DB (column missing) → migration adds column, seed runs once,
-  legacy names get `track=1` exactly once.
-- Subsequent restarts (column already present) → migration skips, seed
-  skips → admin edits stick.
+Gating is critical: an unconditional seed on every startup would re-enable
+Track for those names after an admin had disabled them. With these two gates
+the legacy names are seeded at-most-once per DB, and admin edits stick across
+restarts.
 
 New `db.py` accessors (mirror `list_special_projects` / `set_project_special`
 at lines 288–305):
@@ -195,12 +186,13 @@ admin opens Project Settings panel
     fail).
   - `set_project_track` + `list_tracked_projects` round-trip.
   - `list_project_settings()` includes the `track` field.
-  - On migration (column added) the seed sets `track=1` for the two legacy
-    names without clobbering existing `special` / `price_excluded` flags on
-    those rows.
-  - After the column exists, re-running `init_db()` does NOT re-seed — an
-    admin who sets `track=0` on a legacy name and restarts the app stays at
-    `track=0`.
+  - Fresh DB after `init_db()` has the two legacy names with `track=1`
+    (empty-table seed path).
+  - Pre-existing DB receiving the column also gets the seed (migration path),
+    without clobbering existing `special` / `price_excluded` flags.
+  - After the column exists and the DB is non-empty, re-running `init_db()`
+    does NOT re-seed — an admin who sets `track=0` on a legacy name and
+    restarts the app stays at `track=0`.
 - `main.py`:
   - `POST /api/admin/projects/settings` with `{name, track}` flips the flag
     (admin-only — 401/403 without admin).
