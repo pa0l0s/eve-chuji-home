@@ -330,6 +330,20 @@ async def get_corp_projects(corporation_id: int, access_token: str) -> list:
     return result
 
 
+async def get_corp_project_detail(corporation_id: int, project_id: str, access_token: str) -> dict:
+    # New ESI endpoint; same X-Compatibility-Date contract as get_corp_projects.
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"https://esi.evetech.net/corporations/{corporation_id}/projects/{project_id}",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "X-Compatibility-Date": "2026-01-01",
+            },
+        )
+        r.raise_for_status()
+        return r.json()
+
+
 async def resolve_names(ids: list[int]) -> dict[int, str]:
     """Resolve character / corp / alliance IDs to names via ESI /universe/names/."""
     clean = [i for i in {*ids} if i]
