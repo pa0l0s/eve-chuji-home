@@ -1229,7 +1229,7 @@ async def member(session: str | None = Cookie(None)):
 
     (char_data, char_err), (wallet, wallet_err), (skills, skills_err), \
     (location, loc_err),   (online, online_err),  (ship, ship_err), \
-    (attributes, attr_err), (skillqueue, sq_err) = await asyncio.gather(
+    (attributes, attr_err), (skillqueue, sq_err), (pvp_income, pvp_income_err) = await asyncio.gather(
         _safe(get_character(character_id, access_token)),
         _safe(get_wallet(character_id, access_token)),
         _safe(get_skills(character_id, access_token)),
@@ -1238,6 +1238,7 @@ async def member(session: str | None = Cookie(None)):
         _safe(get_character_ship(character_id, access_token)),
         _safe(get_character_attributes(character_id, access_token)),
         _safe(get_character_skillqueue(character_id, access_token)),
+        _safe(_cached_pvp_income(character_id, access_token)),
     )
 
     profile = None
@@ -1319,6 +1320,7 @@ async def member(session: str | None = Cookie(None)):
         "ship":       _wrap(ship_block,      ship_err),
         "attributes": _wrap(attributes,      attr_err),
         "skillqueue": _wrap(skillqueue_block, sq_err),
+        "pvp_income": _wrap(pvp_income,      pvp_income_err),
     }
 
 
