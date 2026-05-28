@@ -93,6 +93,13 @@ async def init_db():
                 fetched_at REAL NOT NULL
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS project_created_cache (
+                project_id TEXT PRIMARY KEY,
+                created    TEXT NOT NULL,
+                cached_at  REAL NOT NULL
+            )
+        """)
         # Migrations: add new columns on pre-existing DBs.
         async with db.execute("PRAGMA table_info(project_settings)") as cur:
             _cols = {r[1] for r in await cur.fetchall()}
@@ -549,3 +556,27 @@ async def list_all_character_ids() -> list[int]:
     async with aiosqlite.connect(_db_path()) as db:
         async with db.execute("SELECT character_id FROM tokens") as cur:
             return [r[0] for r in await cur.fetchall()]
+
+
+async def get_cached_project_created_map() -> dict[str, str]:
+    async with aiosqlite.connect(_db_path()) as db:
+        async with db.execute(
+            "SELECT project_id, created FROM project_created_cache"
+        ) as cur:
+            return {r[0]: r[1] for r in await cur.fetchall()}
+
+
+async def cache_project_created_batch(items: list[tuple[str, str]]) -> None:
+    if not items:
+        return
+    now = time.time()
+    async with aiosqlite.connect(_db_path()) as db:
+        await db.executemany(
+            """INSERT INTO project_created_cache (project_id, created, cached_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(project_id) DO UPDATE SET
+                 created   = excluded.created,
+                 cached_at = excluded.cached_at""",
+            [(pid, c, now) for (pid, c) in items],
+        )
+        await db.commit()
