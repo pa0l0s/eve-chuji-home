@@ -93,3 +93,36 @@ async def test_admin_track_independent_from_other_flags(client, monkeypatch):
     assert settings["P1"]["price_excluded"] == 1
     assert settings["P1"]["special"] == 1
     assert settings["P1"]["track"] == 1
+
+
+import respx
+from httpx import Response
+
+CORP = "98340844"  # conftest sets CORP_ID=98340844
+PROJECTS_URL = f"https://esi.evetech.net/corporations/{CORP}/projects"
+IDS_URL = "https://esi.evetech.net/latest/universe/ids/"
+
+
+@respx.mock
+async def test_projects_sort_priority_uses_db_track_flag(client, monkeypatch):
+    # Admin marks an unusual name (NOT one of the legacy hard-coded names) as
+    # tracked. /api/projects must give it sort_priority=1.
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    await client.post("/api/admin/projects/settings",
+                      json={"name": "Custom Tracked Project", "track": True},
+                      cookies=cookies)
+
+    respx.get(PROJECTS_URL).mock(return_value=Response(200, json={"projects": [
+        {"id": "p1", "name": "Custom Tracked Project", "state": "Active",
+         "progress": {"current": 1, "desired": 10}},
+        {"id": "p2", "name": "Unrelated Project", "state": "Active",
+         "progress": {"current": 1, "desired": 10}},
+    ]}))
+    respx.post(IDS_URL).mock(return_value=Response(200, json={}))
+
+    r = await client.get("/api/projects", cookies=cookies)
+    assert r.status_code == 200
+    actives = {p["name"]: p for p in r.json()["active"]}
+    assert actives["Custom Tracked Project"]["sort_priority"] == 1
+    assert actives["Unrelated Project"]["sort_priority"] == 5

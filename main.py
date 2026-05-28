@@ -679,9 +679,10 @@ async def projects(session: str | None = Cookie(None)):
 
     excluded_names = await database.list_excluded_projects()
     special_names = await database.list_special_projects()
+    tracked_names = await database.list_tracked_projects()
     for p in active + closed:
         _compute_project_warn(p, excluded_names)
-        p["sort_priority"] = _project_priority(p)
+        p["sort_priority"] = _project_priority(p, tracked_names)
         p["special"] = (p.get("name") or "") in special_names
 
     # Special projects show their top 3 contributors on the card — best-effort,
@@ -777,7 +778,7 @@ async def _build_skill_coverage(skills_data: dict) -> list[dict]:
 
 
 # Special-case priority buckets for the project list (lower number = higher priority).
-PROJECT_TRACKING_NAMES = {"Remote Boost Shield", "Armor Remote Repair"}
+# The Track set is now DB-backed (project_settings.track); see list_tracked_projects().
 PROJECT_LOOT_NAMES = {
     "Sleeper Data Library",
     "Ancient Coordinates Database",
@@ -828,10 +829,10 @@ def _compute_project_warn(p: dict, price_excluded_names: set[str]) -> None:
     p["warn_reasons"] = reasons
 
 
-def _project_priority(p: dict) -> int:
+def _project_priority(p: dict, tracked_names: set[str]) -> int:
     name = p.get("name") or ""
     warn = p.get("warn_level")
-    if name in PROJECT_TRACKING_NAMES:
+    if name in tracked_names:
         return 1
     if warn == "red":
         return 2
