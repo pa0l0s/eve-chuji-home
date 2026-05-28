@@ -126,3 +126,37 @@ async def test_projects_sort_priority_uses_db_track_flag(client, monkeypatch):
     actives = {p["name"]: p for p in r.json()["active"]}
     assert actives["Custom Tracked Project"]["sort_priority"] == 1
     assert actives["Unrelated Project"]["sort_priority"] == 5
+
+
+@respx.mock
+async def test_admin_available_projects_returns_sorted_names(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    respx.get(PROJECTS_URL).mock(return_value=Response(200, json={"projects": [
+        {"id": "p1", "name": "Zeta Project", "state": "Active"},
+        {"id": "p2", "name": "Alpha Project", "state": "Active"},
+        {"id": "p3", "name": "Alpha Project", "state": "Closed"},  # dupe
+        {"id": "p4", "name": "", "state": "Active"},                # empty
+    ]}))
+    r = await client.get("/api/admin/projects/available", cookies=cookies)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["names"] == ["Alpha Project", "Zeta Project"]
+
+
+async def test_admin_available_projects_requires_admin(client):
+    cookies = await _admin_cookie(555)
+    r = await client.get("/api/admin/projects/available", cookies=cookies)
+    assert r.status_code == 403
+
+
+@respx.mock
+async def test_admin_available_projects_handles_esi_failure(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_CHARACTER_IDS", "777")
+    cookies = await _admin_cookie(777)
+    respx.get(PROJECTS_URL).mock(return_value=Response(502, json={"error": "boom"}))
+    r = await client.get("/api/admin/projects/available", cookies=cookies)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["names"] == []
+    assert "error" in body

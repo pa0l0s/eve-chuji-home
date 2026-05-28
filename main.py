@@ -461,6 +461,20 @@ async def admin_delete_project_setting(name: str, _admin: int = Depends(require_
     return {"ok": True}
 
 
+@app.get("/api/admin/projects/available")
+async def admin_available_projects(character_id: int = Depends(require_admin)):
+    """Returns the corp's ESI project names for the admin autocomplete.
+    Best-effort: any ESI failure returns 200 with an empty list and an error
+    field, so the admin panel never breaks on transient network issues."""
+    try:
+        access_token = await get_valid_token(character_id)
+        raw = await get_corp_projects(CORP_ID, access_token)
+        names = sorted({p["name"] for p in raw if p.get("name")})
+        return {"names": names}
+    except Exception as e:
+        return {"names": [], "error": str(e)}
+
+
 # Friendly cache names → DB table or sentinel.
 _CACHE_MAP = {
     "structures": "structure_cache",
