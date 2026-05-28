@@ -90,6 +90,29 @@ async def get_wallet(character_id: int, access_token: str) -> float:
         return r.json()
 
 
+async def get_character_wallet_journal(character_id: int, access_token: str) -> list[dict]:
+    """All wallet-journal entries (ESI keeps ~30 days). Walks pages until empty."""
+    result: list[dict] = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/characters/{character_id}/wallet/journal/",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"page": page},
+            )
+            r.raise_for_status()
+            entries = r.json() or []
+            if not entries:
+                break
+            result.extend(entries)
+            total_pages = int(r.headers.get("X-Pages", "1"))
+            if page >= total_pages:
+                break
+            page += 1
+    return result
+
+
 async def get_skills(character_id: int, access_token: str) -> dict:
     async with httpx.AsyncClient() as client:
         r = await client.get(
