@@ -17,7 +17,7 @@ from auth import (
     is_admin, get_holding_corporation_ids,
 )
 from esi import (
-    get_valid_token, get_character, get_wallet, get_skills,
+    get_valid_token, get_character, get_wallet, get_character_wallet_journal, get_skills,
     get_character_attributes, get_character_skillqueue,
     get_character_location, get_character_online, get_character_ship,
     get_character_contracts, get_character_fleet,
@@ -636,6 +636,29 @@ async def _cached_project_contributors(project_id: str, access_token: str) -> li
     contribs = await get_corp_project_contributors(CORP_ID, project_id, access_token)
     _contributors_cache[project_id] = (time.time(), contribs)
     return contribs
+
+
+_pvp_income_cache: dict[int, tuple[float, float]] = {}  # cid -> (cached_at, amount)
+_PVP_INCOME_TTL = 300.0
+
+
+def _sum_pvp_income(journal: list[dict]) -> float:
+    return sum(
+        e.get("amount", 0) for e in journal
+        if e.get("ref_type") == "corporation_account_withdrawal"
+        and "Cerberus Agnon" in (e.get("description") or "")
+    )
+
+
+async def _cached_pvp_income(character_id: int, access_token: str) -> float:
+    now = time.time()
+    hit = _pvp_income_cache.get(character_id)
+    if hit and (now - hit[0]) < _PVP_INCOME_TTL:
+        return hit[1]
+    journal = await get_character_wallet_journal(character_id, access_token)
+    amount = _sum_pvp_income(journal)
+    _pvp_income_cache[character_id] = (now, amount)
+    return amount
 
 
 @app.get("/api/projects")

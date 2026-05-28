@@ -37,3 +37,87 @@ async def test_journal_stops_on_empty_page():
     respx.get(JOURNAL_URL).mock(return_value=Response(200, json=[]))
     entries = await get_character_wallet_journal(CID, "tok")
     assert entries == []
+
+
+import time
+
+import main as main_module
+from main import _sum_pvp_income, _cached_pvp_income
+
+
+SAMPLE_JOURNAL = [
+    {
+        "id": 1, "amount": 371_000_000,
+        "ref_type": "corporation_account_withdrawal",
+        "description": "Cerberus Agnon transferred cash from corp account to player",
+    },
+    {
+        "id": 2, "amount": 50_000_000,
+        "ref_type": "corporation_account_withdrawal",
+        "description": "Cerberus Agnon transferred cash again",
+    },
+    {
+        "id": 3, "amount": 99_999,
+        "ref_type": "corporation_account_withdrawal",
+        "description": "Someone Else transferred cash",
+    },
+    {
+        "id": 4, "amount": 1,
+        "ref_type": "player_donation",
+        "description": "Gift from Cerberus Agnon",
+    },
+    {
+        "id": 5, "amount": 7,
+        "ref_type": "corporation_account_withdrawal",
+        "description": None,
+    },
+]
+
+
+def test_sum_pvp_income_includes_only_matching_entries():
+    assert _sum_pvp_income(SAMPLE_JOURNAL) == 371_000_000 + 50_000_000
+
+
+def test_sum_pvp_income_empty():
+    assert _sum_pvp_income([]) == 0
+
+
+def test_sum_pvp_income_none_description_safe():
+    entry_with_none = [{
+        "id": 1, "amount": 5,
+        "ref_type": "corporation_account_withdrawal",
+        "description": None,
+    }]
+    assert _sum_pvp_income(entry_with_none) == 0
+
+
+@pytest.fixture(autouse=True)
+def _reset_pvp_cache():
+    main_module._pvp_income_cache.clear()
+    yield
+    main_module._pvp_income_cache.clear()
+
+
+@respx.mock
+async def test_cached_pvp_income_caches_within_ttl():
+    route = respx.get(JOURNAL_URL).mock(return_value=Response(
+        200, json=SAMPLE_JOURNAL, headers={"X-Pages": "1"},
+    ))
+    first  = await _cached_pvp_income(CID, "tok")
+    second = await _cached_pvp_income(CID, "tok")
+    assert first == 371_000_000 + 50_000_000
+    assert second == first
+    assert route.call_count == 1
+
+
+@respx.mock
+async def test_cached_pvp_income_refetches_after_ttl():
+    route = respx.get(JOURNAL_URL).mock(return_value=Response(
+        200, json=SAMPLE_JOURNAL, headers={"X-Pages": "1"},
+    ))
+    await _cached_pvp_income(CID, "tok")
+    cached_at, amount = main_module._pvp_income_cache[CID]
+    main_module._pvp_income_cache[CID] = (cached_at - 301, amount)
+    again = await _cached_pvp_income(CID, "tok")
+    assert again == amount
+    assert route.call_count == 2
