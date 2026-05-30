@@ -797,6 +797,44 @@
     .btn-action:hover:not(:disabled) { background: #38bdf8; color: #0f1117; }
     .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
 
+    /* ── Mail ── */
+    .mail-grid { display: grid; grid-template-columns: 220px minmax(280px, 1fr) minmax(300px, 1.4fr);
+      gap: 1rem; max-width: 1400px; margin: 0 auto; height: calc(100vh - 160px); }
+    .mail-folders, .mail-list, .mail-reader {
+      background: #1e2130; border: 1px solid #2d3348; border-radius: 12px;
+      padding: 1rem; overflow-y: auto; }
+    .mail-compose-btn { width: 100%; margin-bottom: 1rem; }
+    .mail-folder { display: flex; justify-content: space-between; align-items: center;
+      padding: 0.45rem 0.6rem; border-radius: 8px; cursor: pointer; color: #94a3b8;
+      font-size: 0.85rem; }
+    .mail-folder:hover { background: #252a3d; color: #e2e8f0; }
+    .mail-folder.active { background: #0c2233; color: #38bdf8; }
+    .mail-folder .mf-count { background: #ef4444; color: #fff; border-radius: 8px;
+      font-size: 0.65rem; padding: 0 6px; font-weight: 700; }
+    .mail-section-label { text-transform: uppercase; font-size: 0.7rem; color: #64748b;
+      margin: 1rem 0 0.4rem; }
+    .mail-row { padding: 0.55rem 0.6rem; border-radius: 8px; cursor: pointer;
+      border-bottom: 1px solid #252a3d; }
+    .mail-row:hover { background: #252a3d; }
+    .mail-row.active { background: #0c2233; }
+    .mail-row.unread .mr-subject { font-weight: 700; color: #f8fafc; }
+    .mail-row .mr-top { display: flex; justify-content: space-between; gap: 0.5rem; }
+    .mail-row .mr-from { color: #94a3b8; font-size: 0.78rem; }
+    .mail-row .mr-date { color: #66768c; font-size: 0.72rem; white-space: nowrap; }
+    .mail-row .mr-subject { color: #cbd5e1; font-size: 0.85rem; margin-top: 0.15rem; }
+    .mail-row .mr-unread-dot { width: 7px; height: 7px; border-radius: 50%;
+      background: #38bdf8; display: inline-block; margin-right: 6px; }
+    .mail-reader-empty { color: #66768c; text-align: center; padding: 2rem; }
+    .mail-reader-head { border-bottom: 1px solid #2d3348; padding-bottom: 0.75rem;
+      margin-bottom: 0.75rem; }
+    .mail-reader-subject { font-size: 1.05rem; color: #f8fafc; font-weight: 600; }
+    .mail-reader-meta { color: #94a3b8; font-size: 0.8rem; margin-top: 0.35rem; }
+    .mail-reader-body { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word; }
+    .mail-reader-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .mail-link-disabled { color: #64748b; text-decoration: underline dotted; cursor: default; }
+    .mail-load-more { width: 100%; margin-top: 0.75rem; }
+
     /* ── Hidden ── */
     .hidden { display: none !important; }
   </style>
@@ -974,8 +1012,19 @@
       <div id="member-grid" class="layout"></div>
     </div>
 
-    <!-- Mail view (implemented in Task 7) -->
+    <!-- Mail view -->
     <div id="view-mail" class="hidden">
+      <div id="mail-error" class="banner"></div>
+      <div class="mail-grid">
+        <aside class="mail-folders" id="mail-folders">
+          <button class="btn-action mail-compose-btn" onclick="openCompose()">Compose</button>
+          <div id="mail-folder-list"></div>
+        </aside>
+        <section class="mail-list" id="mail-list"></section>
+        <section class="mail-reader" id="mail-reader">
+          <div class="mail-reader-empty">Select a mail to read.</div>
+        </section>
+      </div>
     </div>
   </main>
 
@@ -1124,9 +1173,165 @@
     }
   });
 
-  // ── Mail (stub — implemented in Task 7) ──────────────────────────────────
+  // ── Mail ──────────────────────────────────────────────────────────────────
+  let mailState = { labels: [], lists: [], total: 0, current: { type: 'label', id: 1 },
+                    headers: [], lastMailId: null, selectedId: null, lastOpened: null };
 
-  async function loadMail() { /* implemented in Task 7 */ }
+  const MAIL_SYSTEM_LABELS = { 1: 'Inbox', 2: 'Sent', 4: '[Corp]', 8: '[Alliance]' };
+
+  async function loadMail() {
+    await loadMailFolders();
+    await selectMailFolder('label', mailState.current.id || 1);
+  }
+
+  async function loadMailFolders() {
+    try {
+      const r = await fetch('/api/me/mail/labels');
+      if (!r.ok) { showError('mail-error', mailErr(r.status)); return; }
+      hideError('mail-error');
+      const d = await r.json();
+      mailState.labels = d.labels || [];
+      mailState.lists = d.lists || [];
+      mailState.total = d.total_unread_count || 0;
+      // Refresh the navbar badge from the Inbox label specifically (not the
+      // total, which includes [Corp]/[Alliance]) so it stays in sync on open.
+      const inbox = mailState.labels.find(l => l.label_id === 1);
+      updateMailBadge(inbox ? (inbox.unread_count || 0) : 0);
+      renderMailFolders();
+    } catch { showError('mail-error', 'Network error — could not load mail.'); }
+  }
+
+  function mailErr(status) {
+    if (status === 403) return 'Mail not enabled — log out and back in to grant mail access.';
+    if (status === 401) return 'Please log in.';
+    return 'ESI unavailable — mail could not be loaded.';
+  }
+
+  function renderMailFolders() {
+    const el = document.getElementById('mail-folder-list');
+    let html = '';
+    mailState.labels.forEach(l => {
+      const name = l.name || MAIL_SYSTEM_LABELS[l.label_id] || ('Label ' + l.label_id);
+      const active = mailState.current.type === 'label' && mailState.current.id === l.label_id;
+      const count = l.unread_count ? `<span class="mf-count">${l.unread_count}</span>` : '';
+      html += `<div class="mail-folder ${active ? 'active' : ''}"
+                    onclick="selectMailFolder('label', ${l.label_id})">
+                 <span>${escHtml(name)}</span>${count}</div>`;
+    });
+    if (mailState.lists.length) {
+      html += '<div class="mail-section-label">Mailing Lists</div>';
+      mailState.lists.forEach(ml => {
+        const active = mailState.current.type === 'list' && mailState.current.id === ml.mailing_list_id;
+        html += `<div class="mail-folder ${active ? 'active' : ''}"
+                      onclick="selectMailFolder('list', ${ml.mailing_list_id})">
+                   <span>${escHtml(ml.name)}</span></div>`;
+      });
+    }
+    el.innerHTML = html;
+  }
+
+  async function selectMailFolder(type, id) {
+    mailState.current = { type, id };
+    mailState.headers = [];
+    mailState.lastMailId = null;
+    mailState.selectedId = null;
+    renderMailFolders();
+    document.getElementById('mail-reader').innerHTML =
+      '<div class="mail-reader-empty">Select a mail to read.</div>';
+    await loadMailHeaders();
+  }
+
+  async function loadMailHeaders(append) {
+    const params = new URLSearchParams();
+    if (mailState.current.type === 'label') params.set('labels', mailState.current.id);
+    if (append && mailState.lastMailId) params.set('last_mail_id', mailState.lastMailId);
+    try {
+      const r = await fetch('/api/me/mail?' + params.toString());
+      if (!r.ok) { showError('mail-error', mailErr(r.status)); return; }
+      hideError('mail-error');
+      let rows = await r.json();
+      if (mailState.current.type === 'list') {
+        rows = rows.filter(m => (m.recipients || []).some(
+          x => x.recipient_id === mailState.current.id));
+      }
+      mailState.headers = append ? mailState.headers.concat(rows) : rows;
+      if (rows.length) mailState.lastMailId = rows[rows.length - 1].mail_id;
+      renderMailList(rows.length >= 50);
+    } catch { showError('mail-error', 'Network error — could not load mail.'); }
+  }
+
+  function renderMailList(canLoadMore) {
+    const el = document.getElementById('mail-list');
+    if (!mailState.headers.length) {
+      el.innerHTML = '<div class="mail-reader-empty">No mail in this folder.</div>';
+      return;
+    }
+    let html = mailState.headers.map(m => {
+      const unread = !m.is_read;
+      const dot = unread ? '<span class="mr-unread-dot"></span>' : '';
+      const active = m.mail_id === mailState.selectedId ? 'active' : '';
+      return `<div class="mail-row ${unread ? 'unread' : ''} ${active}"
+                   onclick="openMail(${m.mail_id})">
+                <div class="mr-top"><span class="mr-from">${escHtml(m.from_name || ('#' + m.from))}</span>
+                  <span class="mr-date">${mailDate(m.timestamp)}</span></div>
+                <div class="mr-subject">${dot}${escHtml(m.subject || '(no subject)')}</div>
+              </div>`;
+    }).join('');
+    if (canLoadMore) html += `<button class="btn-action mail-load-more"
+                                onclick="loadMailHeaders(true)">Load more</button>`;
+    el.innerHTML = html;
+  }
+
+  function mailDate(ts) {
+    try { return new Date(ts).toLocaleDateString(); } catch { return ''; }
+  }
+
+  async function openMail(mailId) {
+    mailState.selectedId = mailId;
+    renderMailList(mailState.headers.length >= 50);
+    const reader = document.getElementById('mail-reader');
+    reader.innerHTML = '<div class="mail-reader-empty">Loading…</div>';
+    try {
+      const r = await fetch('/api/me/mail/' + mailId);
+      if (!r.ok) { reader.innerHTML = `<div class="mail-reader-empty">${mailErr(r.status)}</div>`; return; }
+      const m = await r.json();
+      renderMailReader(m);
+      const header = mailState.headers.find(h => h.mail_id === mailId);
+      if (header && !header.is_read) {
+        header.is_read = true;
+        renderMailList(mailState.headers.length >= 50);
+        markMailRead(mailId, true);
+      }
+    } catch { reader.innerHTML = '<div class="mail-reader-empty">Network error.</div>'; }
+  }
+
+  function renderMailReader(m) {
+    const reader = document.getElementById('mail-reader');
+    const recips = (m.recipients || []).map(x => escHtml(x.name || ('#' + x.recipient_id))).join(', ');
+    reader.innerHTML = `
+      <div class="mail-reader-toolbar">
+        <button class="btn-action" onclick="replyMail(${m.mail_id})">Reply</button>
+        <button class="btn-action" onclick="markMailRead(${m.mail_id}, false, true)">Mark unread</button>
+        <button class="btn-action" onclick="deleteMail(${m.mail_id})">Delete</button>
+      </div>
+      <div class="mail-reader-head">
+        <div class="mail-reader-subject">${escHtml(m.subject || '(no subject)')}</div>
+        <div class="mail-reader-meta">From: ${escHtml(m.from_name || ('#' + m.from))}<br>
+          To: ${recips || '—'}<br>${mailDate(m.timestamp)}</div>
+      </div>
+      <div class="mail-reader-body"></div>`;
+    reader.querySelector('.mail-reader-body').appendChild(sanitizeEveMail(m.body || ''));
+    mailState.lastOpened = m;
+  }
+
+  // Temporary sanitizer — replaced by the DOM-based version in Task 9.
+  function sanitizeEveMail(s){ const d=document.createElement('div'); d.textContent=s; return d; }
+
+  // Stubs — fully implemented in Task 8.
+  function openCompose() { alert('Compose — coming in Task 8'); }
+  function markMailRead() { /* Task 8 */ }
+  function deleteMail() { /* Task 8 */ }
+  function replyMail() { /* Task 8 */ }
 
   // ── Contracts ─────────────────────────────────────────────────────────────
 
