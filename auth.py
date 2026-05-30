@@ -27,6 +27,9 @@ SCOPES = " ".join([
     "esi-fleets.read_fleet.v1",
     "esi-fleets.write_fleet.v1",
     "esi-characters.read_corporation_roles.v1",
+    "esi-mail.read_mail.v1",
+    "esi-mail.organize_mail.v1",
+    "esi-mail.send_mail.v1",
 ])
 
 

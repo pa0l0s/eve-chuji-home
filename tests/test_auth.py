@@ -53,3 +53,10 @@ def test_verify_token_decodes_jwt_payload():
     result = verify_token(fake_jwt)
     assert result["CharacterID"] == 9001
     assert result["CharacterName"] == "Test Pilot"
+
+
+def test_scopes_include_mail():
+    from auth import SCOPES
+    assert "esi-mail.read_mail.v1" in SCOPES
+    assert "esi-mail.organize_mail.v1" in SCOPES
+    assert "esi-mail.send_mail.v1" in SCOPES
