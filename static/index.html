@@ -31,7 +31,7 @@
       z-index: -1;
       pointer-events: none;
       background-image:
-        linear-gradient(rgba(15, 17, 23, 0.86), rgba(15, 17, 23, 0.92)),
+        linear-gradient(rgba(15, 17, 23, 0.56), rgba(15, 17, 23, 0.72)),
         var(--bg-image, none);
       background-size: cover, cover;
       background-position: center;
@@ -58,7 +58,7 @@
     .nav-btn {
       background: none;
       border: none;
-      color: #64748b;
+      color: #808fa6;
       font-size: 0.75rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -71,6 +71,17 @@
 
     .nav-btn:hover { color: #e2e8f0; background: #252a3d; }
     .nav-btn.active { color: #38bdf8; background: #0c2233; }
+
+    .nav-mail-btn { position: relative; display: inline-flex; align-items: center; }
+    .nav-mail-btn.has-unread { color: #38bdf8; }
+    .mail-badge {
+      position: absolute; top: 0; right: 0;
+      transform: translate(35%, -35%);
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 8px; background: #ef4444; color: #fff;
+      font-size: 0.65rem; font-weight: 700; line-height: 16px;
+      text-align: center; font-variant-numeric: tabular-nums;
+    }
 
     .nav-right { display: flex; align-items: center; gap: 0.75rem; }
 
@@ -90,7 +101,7 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: #475569;
+      background: #66768c;
       flex-shrink: 0;
     }
     .tq-dot.tq-online {
@@ -116,7 +127,7 @@
       font-weight: 600;
       letter-spacing: 0.03em;
     }
-    .nav-wallet .nw-label { color: #475569; }
+    .nav-wallet .nw-label { color: #66768c; }
     .nav-wallet .nw-val   { color: #38bdf8; font-variant-numeric: tabular-nums; }
 
     .nav-char { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #94a3b8; }
@@ -131,7 +142,7 @@
     .btn-logout {
       background: none;
       border: 1px solid #2d3348;
-      color: #64748b;
+      color: #808fa6;
       font-size: 0.7rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -180,7 +191,7 @@
     .card-title {
       font-size: 0.75rem;
       font-weight: 600;
-      color: #64748b;
+      color: #808fa6;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       margin-bottom: 1rem;
@@ -195,7 +206,7 @@
 
     .metric .label {
       font-size: 0.7rem;
-      color: #475569;
+      color: #66768c;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 0.3rem;
@@ -210,7 +221,7 @@
     }
     .metric .val.val-sm { font-size: 1.15rem; }
     .metric .val.val-xs { font-size: 0.95rem; }
-    .metric .unit { font-size: 0.7rem; color: #475569; margin-left: 0.25rem; }
+    .metric .unit { font-size: 0.7rem; color: #66768c; margin-left: 0.25rem; }
 
     /* ── Progress ── */
     .progress-wrap { margin-top: 0.5rem; }
@@ -219,7 +230,7 @@
       display: flex;
       justify-content: space-between;
       font-size: 0.75rem;
-      color: #64748b;
+      color: #808fa6;
       margin-bottom: 0.35rem;
     }
 
@@ -250,7 +261,7 @@
 
     .badge-blue   { background: #0c2233; color: #38bdf8; }
     .badge-green  { background: #052e16; color: #4ade80; }
-    .badge-muted  { background: #1e2130; color: #475569; border: 1px solid #2d3348; }
+    .badge-muted  { background: #1e2130; color: #66768c; border: 1px solid #2d3348; }
     .badge-orange { background: #2d1a00; color: #fb923c; }
     .badge-red    { background: #450a0a; color: #fca5a5; }
 
@@ -269,7 +280,7 @@
     th {
       text-align: left;
       padding: 0.4rem 0.6rem;
-      color: #475569;
+      color: #66768c;
       font-weight: 500;
       font-size: 0.72rem;
       border-bottom: 1px solid #2d3348;
@@ -284,7 +295,7 @@
     th.sortable .sort-arrow {
       display: inline-block;
       margin-left: 0.2rem;
-      color: #475569;
+      color: #66768c;
       font-size: 0.65rem;
     }
     th.sort-active { color: #38bdf8; }
@@ -309,7 +320,7 @@
     }
 
     .char-info .name { font-size: 1.1rem; font-weight: 700; color: #f8fafc; }
-    .char-info .corp { font-size: 0.8rem; color: #64748b; margin-top: 0.2rem; }
+    .char-info .corp { font-size: 0.8rem; color: #808fa6; margin-top: 0.2rem; }
 
     .sec-status {
       font-size: 0.75rem;
@@ -329,7 +340,7 @@
       margin-bottom: 1.25rem;
       color: #fca5a5;
       font-size: 0.8rem;
-      max-width: 1200px;
+      max-width: 1400px;
       margin-left: auto;
       margin-right: auto;
       display: none;
@@ -366,7 +377,7 @@
 
     .login-sub {
       font-size: 0.8rem;
-      color: #475569;
+      color: #66768c;
       margin-bottom: 2rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
@@ -409,7 +420,7 @@
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      color: #475569;
+      color: #66768c;
       font-size: 0.85rem;
     }
 
@@ -418,7 +429,7 @@
       display: flex;
       gap: 0.25rem;
       margin-bottom: 1.25rem;
-      max-width: 1200px;
+      max-width: 1400px;
       margin-left: auto;
       margin-right: auto;
       border-bottom: 1px solid #2d3348;
@@ -430,7 +441,7 @@
       border: none;
       border-bottom: 2px solid transparent;
       margin-bottom: -1px;
-      color: #64748b;
+      color: #808fa6;
       font-size: 0.8rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -445,7 +456,7 @@
 
     .tab-count {
       background: #252a3d;
-      color: #475569;
+      color: #66768c;
       border-radius: 4px;
       padding: 0.05rem 0.35rem;
       font-size: 0.65rem;
@@ -455,9 +466,9 @@
 
     .tab-btn.active .tab-count { background: #0c2233; color: #38bdf8; }
 
-    .contract-pane { max-width: 1200px; margin: 0 auto; }
+    .contract-pane { max-width: 1400px; margin: 0 auto; }
 
-    .contract-empty { color: #475569; font-size: 0.85rem; padding: 1rem 0; }
+    .contract-empty { color: #66768c; font-size: 0.85rem; padding: 1rem 0; }
 
     .contract-row-clickable { cursor: pointer; }
     .contract-row-clickable:hover > td { background: #232739; }
@@ -492,7 +503,7 @@
       background: #252a3d;
       border: 1px solid #2d3348;
       border-radius: 4px;
-      color: #64748b;
+      color: #808fa6;
       cursor: pointer;
       transition: color 0.15s, background 0.15s, border-color 0.15s;
       font-size: 0.85rem;
@@ -535,7 +546,7 @@
     tr.pc-critical td.pc-priority-cell { border-left-color: #ef4444; }
     tr.pc-warning  td.pc-priority-cell { border-left-color: #fb923c; }
     tr.pc-ok       td.pc-priority-cell { border-left-color: #4ade80; }
-    .pc-empty { color: #475569; font-size: 0.85rem; padding: 0.75rem 0; text-align: center; }
+    .pc-empty { color: #66768c; font-size: 0.85rem; padding: 0.75rem 0; text-align: center; }
 
     /* ── System links ── */
     .sys-link {
@@ -602,7 +613,7 @@
     .modal-close {
       background: none;
       border: none;
-      color: #64748b;
+      color: #808fa6;
       font-size: 1.4rem;
       cursor: pointer;
       padding: 0;
@@ -631,13 +642,13 @@
       align-items: center;
       gap: 0.4rem;
       margin-bottom: 1rem;
-      max-width: 1200px;
+      max-width: 1400px;
       margin-left: auto;
       margin-right: auto;
       flex-wrap: wrap;
     }
     .proj-sort-label {
-      color: #475569;
+      color: #66768c;
       font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -654,7 +665,7 @@
       font-weight: 600;
       transition: color 0.15s, border-color 0.15s, background 0.15s;
     }
-    .proj-sort-btn:hover { color: #e2e8f0; border-color: #475569; }
+    .proj-sort-btn:hover { color: #e2e8f0; border-color: #66768c; }
     .proj-sort-btn.active { color: #38bdf8; border-color: #38bdf8; background: #0c2233; }
     .proj-sort-arrow { margin-left: 0.25rem; font-size: 0.65rem; }
 
@@ -664,7 +675,7 @@
     .fleet-cmp { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     .fleet-cmp th {
       text-align: left; padding: 0.5rem 0.6rem;
-      color: #64748b; font-size: 0.7rem;
+      color: #808fa6; font-size: 0.7rem;
       text-transform: uppercase; letter-spacing: 0.06em;
       border-bottom: 1px solid #2d3348;
     }
@@ -683,14 +694,14 @@
     }
     .fleet-cmp .ft-pos    { color: #e2e8f0; font-weight: 500; }
     .fleet-cmp .ft-role   {
-      font-size: 0.6rem; font-weight: 700; color: #475569;
+      font-size: 0.6rem; font-weight: 700; color: #66768c;
       text-transform: uppercase; letter-spacing: 0.06em;
       margin-right: 0.4rem;
     }
     .fleet-cmp .indent-1 { padding-left: 1.4rem !important; }
     .fleet-cmp .indent-2 { padding-left: 2.6rem !important; }
     .fleet-cmp .indent-3 { padding-left: 3.8rem !important; }
-    .fleet-cmp .ft-empty { color: #475569; font-style: italic; font-size: 0.75rem; }
+    .fleet-cmp .ft-empty { color: #66768c; font-style: italic; font-size: 0.75rem; }
     .fleet-cmp .ft-portrait {
       width: 22px; height: 22px; border-radius: 50%;
       background: #252a3d; vertical-align: middle; margin-right: 0.4rem;
@@ -704,7 +715,7 @@
     }
     .match-dot.match    { background: #4ade80; }
     .match-dot.mismatch { background: #fb923c; }
-    .match-dot.empty    { background: #475569; }
+    .match-dot.empty    { background: #66768c; }
 
     /* Fleet info header */
     .fleet-info {
@@ -720,7 +731,7 @@
     }
     .fleet-info .fi-label {
       font-size: 0.65rem;
-      color: #64748b;
+      color: #808fa6;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 0.2rem;
@@ -750,7 +761,7 @@
     }
     .fleet-motd-label {
       font-size: 0.65rem;
-      color: #64748b;
+      color: #808fa6;
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 0.3rem;
@@ -766,7 +777,7 @@
     .fleet-cmp tr.drop-target td { background: rgba(56, 189, 248, 0.06) !important; }
     .ft-cell-btn {
       background: #252a3d; border: 1px solid #2d3348;
-      color: #64748b; cursor: pointer;
+      color: #808fa6; cursor: pointer;
       font-size: 0.75rem; padding: 0.1rem 0.45rem;
       border-radius: 4px; margin-left: 0.5rem;
       opacity: 0.55; transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
@@ -785,6 +796,61 @@
     }
     .btn-action:hover:not(:disabled) { background: #38bdf8; color: #0f1117; }
     .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Mail ── */
+    .mail-grid { display: grid; grid-template-columns: 220px minmax(280px, 1fr) minmax(300px, 1.4fr);
+      gap: 1rem; max-width: 1400px; margin: 0 auto; height: calc(100vh - 160px); }
+    .mail-folders, .mail-list, .mail-reader {
+      background: #1e2130; border: 1px solid #2d3348; border-radius: 12px;
+      padding: 1rem; overflow-y: auto; }
+    .mail-compose-btn { width: 100%; margin-bottom: 1rem; }
+    .mail-folder { display: flex; justify-content: space-between; align-items: center;
+      padding: 0.45rem 0.6rem; border-radius: 8px; cursor: pointer; color: #94a3b8;
+      font-size: 0.85rem; }
+    .mail-folder:hover { background: #252a3d; color: #e2e8f0; }
+    .mail-folder.active { background: #0c2233; color: #38bdf8; }
+    .mail-folder .mf-count { background: #ef4444; color: #fff; border-radius: 8px;
+      font-size: 0.65rem; padding: 0 6px; font-weight: 700; }
+    .mail-section-label { text-transform: uppercase; font-size: 0.7rem; color: #64748b;
+      margin: 1rem 0 0.4rem; }
+    .mail-row { padding: 0.55rem 0.6rem; border-radius: 8px; cursor: pointer;
+      border-bottom: 1px solid #252a3d; }
+    .mail-row:hover { background: #252a3d; }
+    .mail-row.active { background: #0c2233; }
+    .mail-row.unread .mr-subject { font-weight: 700; color: #f8fafc; }
+    .mail-row .mr-top { display: flex; justify-content: space-between; gap: 0.5rem; }
+    .mail-row .mr-from { color: #94a3b8; font-size: 0.78rem; }
+    .mail-row .mr-date { color: #66768c; font-size: 0.72rem; white-space: nowrap; }
+    .mail-row .mr-subject { color: #cbd5e1; font-size: 0.85rem; margin-top: 0.15rem; }
+    .mail-row .mr-unread-dot { width: 7px; height: 7px; border-radius: 50%;
+      background: #38bdf8; display: inline-block; margin-right: 6px; }
+    .mail-reader-empty { color: #66768c; text-align: center; padding: 2rem; }
+    .mail-reader-head { border-bottom: 1px solid #2d3348; padding-bottom: 0.75rem;
+      margin-bottom: 0.75rem; }
+    .mail-reader-subject { font-size: 1.05rem; color: #f8fafc; font-weight: 600; }
+    .mail-reader-meta { color: #94a3b8; font-size: 0.8rem; margin-top: 0.35rem; }
+    .mail-reader-body { color: #cbd5e1; font-size: 0.9rem; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word; }
+    .mail-reader-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .mail-link-disabled { color: #64748b; text-decoration: underline dotted; cursor: default; }
+    .mail-load-more { width: 100%; margin-top: 0.75rem; }
+
+    .compose-form label { display: block; }
+    .compose-form input, .compose-form textarea { width: 100%; background: #0f1117;
+      border: 1px solid #2d3348; border-radius: 8px; color: #e2e8f0; padding: 0.5rem;
+      font-family: inherit; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .compose-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
+    .compose-chip { background: #0c2233; color: #38bdf8; border-radius: 8px;
+      padding: 0.15rem 0.5rem; font-size: 0.78rem; }
+    .compose-chip button { background: none; border: none; color: #38bdf8; cursor: pointer; }
+    .compose-results { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
+    .compose-contacts { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem;
+      max-height: 140px; overflow-y: auto; }
+    .compose-contact { background: #1e2130; border: 1px solid #2d3348; color: #cbd5e1;
+      border-radius: 8px; padding: 0.2rem 0.5rem; font-size: 0.78rem; cursor: pointer; }
+    .compose-contact:hover { border-color: #38bdf8; color: #e2e8f0; }
+    .compose-contact .cc-type { color: #66768c; font-size: 0.68rem; margin-left: 0.3rem; }
+    .compose-actions { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
 
     /* ── Hidden ── */
     .hidden { display: none !important; }
@@ -808,7 +874,7 @@
       Log in with EVE Online
     </a>
     <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #2d3348;
-                font-size:0.72rem;color:#64748b;line-height:1.55">
+                font-size:0.72rem;color:#808fa6;line-height:1.55">
       You can manage authorized applications at
       <a href="https://developers.eveonline.com/authorized-apps"
          target="_blank" rel="noopener"
@@ -840,6 +906,13 @@
       <button class="nav-btn hidden" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-fleet" onclick="showView('fleet')">Fleet</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
+      <button class="nav-btn nav-mail-btn" id="btn-mail" onclick="showView('mail')" title="Mail" aria-label="Mail">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+          <path d="m22 7-10 6L2 7"></path>
+        </svg>
+        <span class="mail-badge hidden" id="mail-badge">0</span>
+      </button>
       <button class="nav-btn hidden" id="btn-admin" onclick="showView('admin')">Admin</button>
     </div>
     <div class="nav-right">
@@ -862,10 +935,10 @@
     <div id="view-contracts">
       <div id="contracts-error" class="banner"></div>
       <div style="display:flex;align-items:center;justify-content:space-between;
-                  gap:1rem;max-width:1200px;margin:0 auto 1.5rem auto">
+                  gap:1rem;max-width:1400px;margin:0 auto 1.5rem auto">
         <div class="page-title" style="margin:0">Corporation Contracts</div>
         <div style="display:flex;align-items:center;gap:0.6rem">
-          <span id="contracts-updated" style="font-size:0.7rem;color:#475569"
+          <span id="contracts-updated" style="font-size:0.7rem;color:#66768c"
                 title="Auto-refresh every 5 min (matches ESI's cache TTL). Pauses when tab is hidden or another view is open. Click Refresh to force."></span>
           <button class="btn-action" onclick="loadContracts(true)">Refresh</button>
         </div>
@@ -933,7 +1006,7 @@
     <div id="view-fleet" class="hidden">
       <div id="fleet-error" class="banner"></div>
       <div id="fleet-status-bar" style="display:flex;align-items:center;justify-content:space-between;
-                                         gap:1rem;max-width:1200px;margin:0 auto 1rem auto">
+                                         gap:1rem;max-width:1400px;margin:0 auto 1rem auto">
         <div class="page-title" style="margin:0">Fleet</div>
         <div id="fleet-actions" style="display:flex;gap:0.5rem"></div>
       </div>
@@ -954,6 +1027,21 @@
       <div id="member-error" class="banner"></div>
       <div class="page-title">Member Profile</div>
       <div id="member-grid" class="layout"></div>
+    </div>
+
+    <!-- Mail view -->
+    <div id="view-mail" class="hidden">
+      <div id="mail-error" class="banner"></div>
+      <div class="mail-grid">
+        <aside class="mail-folders" id="mail-folders">
+          <button class="btn-action mail-compose-btn" onclick="openCompose()">Compose</button>
+          <div id="mail-folder-list"></div>
+        </aside>
+        <section class="mail-list" id="mail-list"></section>
+        <section class="mail-reader" id="mail-reader">
+          <div class="mail-reader-empty">Select a mail to read.</div>
+        </section>
+      </div>
     </div>
   </main>
 
@@ -990,6 +1078,7 @@
       showView('contracts');
       pollServerStatus();
       pollWallet();
+      pollMailBadge();
     } catch { show('view-login'); }
   }
 
@@ -1011,6 +1100,28 @@
     el.classList.remove('hidden');
     el.querySelector('.nw-val').textContent = w.value;
     el.title = w.tooltip;
+  }
+
+  async function pollMailBadge() {
+    try {
+      const r = await fetch('/api/me/mail/unread');
+      if (r.ok) updateMailBadge((await r.json()).inbox_unread);
+    } catch {}
+    if (!document.hidden) setTimeout(pollMailBadge, 60000);
+  }
+
+  function updateMailBadge(count) {
+    const btn = document.getElementById('btn-mail');
+    const badge = document.getElementById('mail-badge');
+    if (!btn || !badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.remove('hidden');
+      btn.classList.add('has-unread');
+    } else {
+      badge.classList.add('hidden');
+      btn.classList.remove('has-unread');
+    }
   }
 
   async function pollServerStatus() {
@@ -1051,7 +1162,7 @@
 
   function showView(view) {
     currentView = view;
-    ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin'].forEach(v => {
+    ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin', 'mail'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
@@ -1066,16 +1177,396 @@
     if (view === 'fleet') loadFleet();
     if (view === 'member') loadMember();
     if (view === 'admin') loadAdmin();
+    if (view === 'mail') loadMail();
   }
 
   // Pause/resume contract auto-refresh based on tab visibility.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (contractsTimer) { clearTimeout(contractsTimer); contractsTimer = null; }
-    } else if (currentView === 'contracts' && !contractsTimer) {
-      loadContracts();  // resume — fetch once and reschedule
+    } else {
+      if (currentView === 'contracts' && !contractsTimer) loadContracts();  // resume — fetch once and reschedule
+      pollMailBadge();
     }
   });
+
+  // ── Mail ──────────────────────────────────────────────────────────────────
+  let mailState = { labels: [], lists: [], total: 0, current: { type: 'label', id: 1 },
+                    headers: [], lastMailId: null, selectedId: null, lastOpened: null, hasMore: false };
+
+  const MAIL_SYSTEM_LABELS = { 1: 'Inbox', 2: 'Sent', 4: '[Corp]', 8: '[Alliance]' };
+
+  async function loadMail() {
+    await loadMailFolders();
+    await selectMailFolder('label', mailState.current.id || 1);
+  }
+
+  async function loadMailFolders() {
+    try {
+      const r = await fetch('/api/me/mail/labels');
+      if (!r.ok) { showError('mail-error', mailErr(r.status)); return; }
+      hideError('mail-error');
+      const d = await r.json();
+      mailState.labels = d.labels || [];
+      mailState.lists = d.lists || [];
+      mailState.total = d.total_unread_count || 0;
+      // Refresh the navbar badge from the Inbox label specifically (not the
+      // total, which includes [Corp]/[Alliance]) so it stays in sync on open.
+      const inbox = mailState.labels.find(l => l.label_id === 1);
+      updateMailBadge(inbox ? (inbox.unread_count || 0) : 0);
+      renderMailFolders();
+    } catch { showError('mail-error', 'Network error — could not load mail.'); }
+  }
+
+  function mailErr(status) {
+    if (status === 403) return 'Mail not enabled — log out and back in to grant mail access.';
+    if (status === 401) return 'Please log in.';
+    return 'ESI unavailable — mail could not be loaded.';
+  }
+
+  function renderMailFolders() {
+    const el = document.getElementById('mail-folder-list');
+    let html = '';
+    mailState.labels.forEach(l => {
+      const name = l.name || MAIL_SYSTEM_LABELS[l.label_id] || ('Label ' + l.label_id);
+      const active = mailState.current.type === 'label' && mailState.current.id === l.label_id;
+      const count = l.unread_count ? `<span class="mf-count">${l.unread_count}</span>` : '';
+      html += `<div class="mail-folder ${active ? 'active' : ''}"
+                    onclick="selectMailFolder('label', ${l.label_id})">
+                 <span>${escHtml(name)}</span>${count}</div>`;
+    });
+    if (mailState.lists.length) {
+      html += '<div class="mail-section-label">Mailing Lists</div>';
+      mailState.lists.forEach(ml => {
+        const active = mailState.current.type === 'list' && mailState.current.id === ml.mailing_list_id;
+        html += `<div class="mail-folder ${active ? 'active' : ''}"
+                      onclick="selectMailFolder('list', ${ml.mailing_list_id})">
+                   <span>${escHtml(ml.name)}</span></div>`;
+      });
+    }
+    el.innerHTML = html;
+  }
+
+  async function selectMailFolder(type, id) {
+    mailState.current = { type, id };
+    mailState.headers = [];
+    mailState.lastMailId = null;
+    mailState.selectedId = null;
+    renderMailFolders();
+    document.getElementById('mail-reader').innerHTML =
+      '<div class="mail-reader-empty">Select a mail to read.</div>';
+    await loadMailHeaders();
+  }
+
+  async function loadMailHeaders(append) {
+    const params = new URLSearchParams();
+    if (mailState.current.type === 'label') params.set('labels', mailState.current.id);
+    if (append && mailState.lastMailId) params.set('last_mail_id', mailState.lastMailId);
+    try {
+      const r = await fetch('/api/me/mail?' + params.toString());
+      if (!r.ok) { showError('mail-error', mailErr(r.status)); return; }
+      hideError('mail-error');
+      let rows = await r.json();
+      if (mailState.current.type === 'list') {
+        rows = rows.filter(m => (m.recipients || []).some(
+          x => x.recipient_id === mailState.current.id));
+      }
+      mailState.headers = append ? mailState.headers.concat(rows) : rows;
+      if (rows.length) mailState.lastMailId = rows[rows.length - 1].mail_id;
+      mailState.hasMore = rows.length >= 50;
+      renderMailList(mailState.hasMore);
+    } catch { showError('mail-error', 'Network error — could not load mail.'); }
+  }
+
+  function renderMailList(canLoadMore) {
+    const el = document.getElementById('mail-list');
+    if (!mailState.headers.length) {
+      el.innerHTML = '<div class="mail-reader-empty">No mail in this folder.</div>';
+      return;
+    }
+    let html = mailState.headers.map(m => {
+      const unread = !m.is_read;
+      const dot = unread ? '<span class="mr-unread-dot"></span>' : '';
+      const active = m.mail_id === mailState.selectedId ? 'active' : '';
+      return `<div class="mail-row ${unread ? 'unread' : ''} ${active}"
+                   onclick="openMail(${m.mail_id})">
+                <div class="mr-top"><span class="mr-from">${escHtml(m.from_name || ('#' + m.from))}</span>
+                  <span class="mr-date">${mailDate(m.timestamp)}</span></div>
+                <div class="mr-subject">${dot}${escHtml(m.subject || '(no subject)')}</div>
+              </div>`;
+    }).join('');
+    if (canLoadMore) html += `<button class="btn-action mail-load-more"
+                                onclick="loadMailHeaders(true)">Load more</button>`;
+    el.innerHTML = html;
+  }
+
+  function mailDate(ts) {
+    try { return new Date(ts).toLocaleDateString(); } catch { return ''; }
+  }
+
+  async function openMail(mailId) {
+    mailState.selectedId = mailId;
+    renderMailList(mailState.hasMore);
+    const reader = document.getElementById('mail-reader');
+    reader.innerHTML = '<div class="mail-reader-empty">Loading…</div>';
+    try {
+      const r = await fetch('/api/me/mail/' + mailId);
+      if (!r.ok) { reader.innerHTML = `<div class="mail-reader-empty">${mailErr(r.status)}</div>`; return; }
+      const m = await r.json();
+      renderMailReader(m);
+      const header = mailState.headers.find(h => h.mail_id === mailId);
+      if (header && !header.is_read) {
+        header.is_read = true;
+        renderMailList(mailState.hasMore);
+        markMailRead(mailId, true);
+      }
+    } catch { reader.innerHTML = '<div class="mail-reader-empty">Network error.</div>'; }
+  }
+
+  function renderMailReader(m) {
+    const reader = document.getElementById('mail-reader');
+    const recips = (m.recipients || []).map(x => escHtml(x.name || ('#' + x.recipient_id))).join(', ');
+    reader.innerHTML = `
+      <div class="mail-reader-toolbar">
+        <button class="btn-action" onclick="replyMail(${m.mail_id})">Reply</button>
+        <button class="btn-action" onclick="markMailRead(${m.mail_id}, false, true)">Mark unread</button>
+        <button class="btn-action" onclick="deleteMail(${m.mail_id})">Delete</button>
+      </div>
+      <div class="mail-reader-head">
+        <div class="mail-reader-subject">${escHtml(m.subject || '(no subject)')}</div>
+        <div class="mail-reader-meta">From: ${escHtml(m.from_name || ('#' + m.from))}<br>
+          To: ${recips || '—'}<br>${mailDate(m.timestamp)}</div>
+      </div>
+      <div class="mail-reader-body"></div>`;
+    reader.querySelector('.mail-reader-body').appendChild(sanitizeEveMail(m.body || ''));
+    mailState.lastOpened = m;
+  }
+
+  // Render EVE mail body safely: allow text, <br>, basic styling, http links;
+  // neutralize client-only links (showinfo:/killReport:) to non-clickable text.
+  function sanitizeEveMail(raw) {
+    const out = document.createElement('div');
+    // Parse the EVE markup in an inert document (no scripts/resource loads run).
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const allowed = new Set(['BR', 'B', 'I', 'U', 'FONT', 'A', 'LOC', 'SPAN', 'DIV', 'P']);
+
+    function argbToRgb(c) {
+      if (!c) return null;
+      const m = String(c).replace('#', '');
+      if (m.length === 8) return '#' + m.slice(2);   // strip AA from #AARRGGBB
+      if (m.length === 6) return '#' + m;
+      return null;
+    }
+
+    function walk(src, dst) {
+      src.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          dst.appendChild(document.createTextNode(node.nodeValue));
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = node.tagName;
+        if (!allowed.has(tag)) { walk(node, dst); return; }  // unwrap unknown tags
+
+        if (tag === 'BR') { dst.appendChild(document.createElement('br')); return; }
+
+        if (tag === 'A') {
+          const href = node.getAttribute('href') || '';
+          if (/^https?:\/\//i.test(href)) {
+            const a = document.createElement('a');
+            a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+            a.style.color = '#38bdf8';
+            walk(node, a); dst.appendChild(a);
+          } else {
+            // showinfo:/killReport:/etc — client-only, render as plain styled text
+            const span = document.createElement('span');
+            span.className = 'mail-link-disabled';
+            walk(node, span); dst.appendChild(span);
+          }
+          return;
+        }
+
+        if (tag === 'FONT') {
+          const span = document.createElement('span');
+          const rgb = argbToRgb(node.getAttribute('color'));
+          if (rgb) span.style.color = rgb;
+          walk(node, span); dst.appendChild(span);
+          return;
+        }
+
+        if (tag === 'LOC') { walk(node, dst); return; }  // unwrap <loc>
+
+        // B / I / U / SPAN / DIV / P — keep the tag, drop all attributes
+        const safe = document.createElement(tag.toLowerCase());
+        walk(node, safe); dst.appendChild(safe);
+      });
+    }
+
+    walk(doc.body, out);
+    return out;
+  }
+
+  async function markMailRead(mailId, read, refreshRow) {
+    try {
+      await fetch('/api/me/mail/' + mailId, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ read }) });
+    } catch {}
+    if (refreshRow) {
+      const h = mailState.headers.find(x => x.mail_id === mailId);
+      if (h) { h.is_read = read; renderMailList(mailState.hasMore); }
+    }
+    pollMailBadgeOnce();
+  }
+
+  async function deleteMail(mailId) {
+    if (!confirm('Delete this mail permanently?')) return;
+    try {
+      const r = await fetch('/api/me/mail/' + mailId, { method: 'DELETE' });
+      if (!r.ok) { showError('mail-error', mailErr(r.status)); return; }
+    } catch { showError('mail-error', 'Network error.'); return; }
+    mailState.headers = mailState.headers.filter(x => x.mail_id !== mailId);
+    mailState.selectedId = null;
+    renderMailList(mailState.hasMore);
+    document.getElementById('mail-reader').innerHTML =
+      '<div class="mail-reader-empty">Select a mail to read.</div>';
+    pollMailBadgeOnce();
+  }
+
+  async function pollMailBadgeOnce() {
+    try {
+      const r = await fetch('/api/me/mail/unread');
+      if (r.ok) updateMailBadge((await r.json()).inbox_unread);
+    } catch {}
+  }
+
+  let composeRecipients = [];  // [{recipient_id, recipient_type, name}]
+
+  function openCompose(prefill) {
+    composeRecipients = (prefill && prefill.recipients) || [];
+    showModal('Compose Mail', composeModalHtml(prefill || {}));
+    renderComposeRecipients();
+    loadComposeContacts();
+  }
+
+  function composeModalHtml(p) {
+    return `
+      <div class="compose-form">
+        <label class="mail-section-label">Recipients</label>
+        <div id="compose-chips" class="compose-chips"></div>
+        <input id="compose-recipient-input" placeholder="Type a name, Enter to search"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();composeSearchRecipient();}">
+        <div id="compose-search-results" class="compose-results"></div>
+        <label class="mail-section-label">From your contacts</label>
+        <input id="compose-contacts-filter" placeholder="Filter contacts…"
+               oninput="renderComposeContacts()">
+        <div id="compose-contacts" class="compose-contacts">Loading contacts…</div>
+        <label class="mail-section-label">Subject</label>
+        <input id="compose-subject" value="${escAttr(p.subject || '')}">
+        <label class="mail-section-label">Message</label>
+        <textarea id="compose-body" rows="8">${escHtml(p.body || '')}</textarea>
+        <div id="compose-error" class="banner"></div>
+        <div class="compose-actions">
+          <button class="btn-action" onclick="sendCompose()">Send</button>
+        </div>
+      </div>`;
+  }
+
+  function renderComposeRecipients() {
+    const el = document.getElementById('compose-chips');
+    if (!el) return;
+    el.innerHTML = composeRecipients.map((r, i) =>
+      `<span class="compose-chip">${escHtml(r.name || ('#' + r.recipient_id))}
+         <button onclick="removeRecipient(${i})" aria-label="remove">×</button></span>`).join('');
+  }
+
+  function removeRecipient(i) { composeRecipients.splice(i, 1); renderComposeRecipients(); }
+
+  async function composeSearchRecipient() {
+    const input = document.getElementById('compose-recipient-input');
+    const name = input.value.trim();
+    if (!name) return;
+    const box = document.getElementById('compose-search-results');
+    box.textContent = 'Searching…';
+    try {
+      const r = await fetch('/api/me/mail/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names: [name] }) });
+      const matches = r.ok ? await r.json() : [];
+      if (!matches.length) { box.textContent = 'No match.'; return; }
+      box.innerHTML = matches.map(m =>
+        `<button class="btn-action" onclick='addRecipient(${escAttr(JSON.stringify(m))})'>
+           ${escHtml(m.name)} (${escHtml(m.recipient_type)})</button>`).join(' ');
+    } catch { box.textContent = 'Search failed.'; }
+  }
+
+  function addRecipient(m) {
+    if (!composeRecipients.some(r => r.recipient_id === m.recipient_id))
+      composeRecipients.push(m);
+    renderComposeRecipients();
+    const inp = document.getElementById('compose-recipient-input');
+    if (inp) inp.value = '';
+    const sr = document.getElementById('compose-search-results');
+    if (sr) sr.innerHTML = '';
+  }
+
+  let composeContacts = [];
+  async function loadComposeContacts() {
+    composeContacts = [];
+    try {
+      const r = await fetch('/api/me/mail/contacts');
+      composeContacts = r.ok ? await r.json() : [];
+    } catch { composeContacts = []; }
+    renderComposeContacts();
+  }
+
+  function renderComposeContacts() {
+    const box = document.getElementById('compose-contacts');
+    if (!box) return;
+    if (!composeContacts.length) { box.textContent = 'No contacts available.'; return; }
+    const filterEl = document.getElementById('compose-contacts-filter');
+    const q = (filterEl ? filterEl.value : '').trim().toLowerCase();
+    const list = composeContacts
+      .filter(c => !q || (c.name || '').toLowerCase().includes(q))
+      .slice(0, 50);
+    if (!list.length) { box.textContent = 'No matching contacts.'; return; }
+    box.innerHTML = list.map(c =>
+      `<button class="compose-contact" onclick='addRecipient(${escAttr(JSON.stringify(
+         { recipient_id: c.recipient_id, recipient_type: c.recipient_type, name: c.name }))})'>
+         ${escHtml(c.name || ('#' + c.recipient_id))}
+         <span class="cc-type">${escHtml(c.recipient_type)}</span></button>`).join('');
+  }
+
+  async function sendCompose() {
+    const subject = document.getElementById('compose-subject').value.trim();
+    const body = document.getElementById('compose-body').value;
+    const errEl = document.getElementById('compose-error');
+    if (!composeRecipients.length || !subject) {
+      errEl.textContent = 'Add at least one recipient and a subject.';
+      errEl.classList.add('show'); return;
+    }
+    const payload = { recipients: composeRecipients.map(
+      ({ recipient_id, recipient_type }) => ({ recipient_id, recipient_type })),
+      subject, body };
+    try {
+      const r = await fetch('/api/me/mail', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        errEl.textContent = d.detail || 'Send failed.'; errEl.classList.add('show'); return;
+      }
+      closeModal();
+    } catch { errEl.textContent = 'Network error.'; errEl.classList.add('show'); }
+  }
+
+  function replyMail(mailId) {
+    const m = mailState.lastOpened;
+    if (!m) return;
+    const subj = m.subject && m.subject.startsWith('Re:') ? m.subject : 'Re: ' + (m.subject || '');
+    openCompose({ recipients: [{ recipient_id: m.from,
+      recipient_type: 'character', name: m.from_name }], subject: subj, body: '' });
+  }
 
   // ── Contracts ─────────────────────────────────────────────────────────────
 
@@ -1228,7 +1719,7 @@
                   ${issuerLine(c)}
                 </td>
                 <td><span class="badge badge-muted">${typeLabel(c.type)}</span></td>
-                <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#66768c">–</span>'}</td>
                 <td>${haulerCell(c)}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
@@ -1258,7 +1749,7 @@
               <tr>
                 <td style="color:#e2e8f0">
                   ${locWithType(c.start_name, c.start_type, c.start_system_name, c.start_system_id)}
-                  <span style="color:#475569"> → </span>
+                  <span style="color:#66768c"> → </span>
                   ${locWithType(c.end_name, c.end_type, c.end_system_name, c.end_system_id)}
                   ${issuerLine(c)}
                 </td>
@@ -1297,7 +1788,7 @@
                   ${issuerLine(c)}
                 </td>
                 <td style="color:#38bdf8">${fmtISK(c.price || 0)} ISK</td>
-                <td>${c.buyout ? fmtISK(c.buyout) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${c.buyout ? fmtISK(c.buyout) + ' ISK' : '<span style="color:#66768c">–</span>'}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
                 <td>${openInEveBtn(c.contract_id)}</td>
@@ -1331,7 +1822,7 @@
                   ${issuerLine(c)}
                 </td>
                 <td><span class="badge badge-muted">${typeLabel(c.type)}</span></td>
-                <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#475569">–</span>'}</td>
+                <td>${c.price ? fmtISK(c.price) + ' ISK' : '<span style="color:#66768c">–</span>'}</td>
                 <td>${haulerCell(c)}</td>
                 <td>${statusBadge(c.status)}</td>
                 <td>${timeLeft(c.date_expired)}</td>
@@ -1344,7 +1835,7 @@
 
   function issuerLine(c) {
     if (!c.issuer_name) return '';
-    return `<div style="font-size:0.7rem;color:#475569;margin-top:0.2rem">
+    return `<div style="font-size:0.7rem;color:#66768c;margin-top:0.2rem">
               by ${escHtml(c.issuer_name)}
             </div>`;
   }
@@ -1352,13 +1843,13 @@
   function haulerCell(c) {
     if (c.acceptor_name) {
       const accepted = c.date_accepted
-        ? `<div style="font-size:0.65rem;color:#475569;margin-top:0.15rem">
+        ? `<div style="font-size:0.65rem;color:#66768c;margin-top:0.15rem">
              ${new Date(c.date_accepted).toLocaleDateString()}
            </div>`
         : '';
       return `<span style="color:#4ade80">${escHtml(c.acceptor_name)}</span>${accepted}`;
     }
-    return '<span style="color:#475569">–</span>';
+    return '<span style="color:#66768c">–</span>';
   }
 
   // interactive=false → static icon (used where the whole row is clickable).
@@ -1385,7 +1876,7 @@
   async function openContractDetail(id) {
     const c = findContract(id);
     const title = c ? (c.title || 'Contract #' + id) : 'Contract #' + id;
-    showModal(title, '<div style="color:#475569;text-align:center;padding:1.5rem">Loading details…</div>');
+    showModal(title, '<div style="color:#66768c;text-align:center;padding:1.5rem">Loading details…</div>');
     try {
       const r = await fetch('/api/contracts/' + id + '/detail');
       if (!r.ok) { setModalBody(cardErrorBlock('Could not load details (' + r.status + ')')); return; }
@@ -1407,23 +1898,23 @@
       : '';
     const price = c && c.price
       ? `<span style="color:#38bdf8">${fmtISK(c.price)} ISK</span>`
-      : '<span style="color:#475569">–</span>';
+      : '<span style="color:#66768c">–</span>';
     const meta = c ? `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;
                   font-size:0.8rem;margin-bottom:1rem;padding-bottom:0.75rem;
                   border-bottom:1px solid #2d3348">
-        <div><span style="color:#64748b">Type</span><br>
+        <div><span style="color:#808fa6">Type</span><br>
           <span class="badge badge-muted">${typeLabel(c.type)}</span></div>
-        <div><span style="color:#64748b">Contract Price</span><br>${price}</div>
-        <div><span style="color:#64748b">Issuer</span><br>
+        <div><span style="color:#808fa6">Contract Price</span><br>${price}</div>
+        <div><span style="color:#808fa6">Issuer</span><br>
           <span style="color:#94a3b8">${escHtml(c.issuer_name || '–')}</span></div>
-        <div><span style="color:#64748b">Status</span><br>${statusBadge(c.status)}</div>
-        <div><span style="color:#64748b">Expires</span><br>${timeLeft(c.date_expired)}</div>
+        <div><span style="color:#808fa6">Status</span><br>${statusBadge(c.status)}</div>
+        <div><span style="color:#808fa6">Expires</span><br>${timeLeft(c.date_expired)}</div>
         <div style="align-self:end">${openInEveBtn(c.contract_id)}</div>
       </div>` : '';
 
     const cell = v => v == null
-      ? '<span style="color:#475569">–</span>'
+      ? '<span style="color:#66768c">–</span>'
       : fmtISK(v) + ' ISK';
     const rows = (d.items || []).map(i => `
       <tr>
@@ -1447,12 +1938,12 @@
         </tr></thead>
         <tbody>${rows}</tbody>
         <tfoot><tr style="border-top:2px solid #2d3348;font-weight:600;color:#e2e8f0">
-          <td colspan="4" style="text-align:right;color:#64748b">Contract total</td>
+          <td colspan="4" style="text-align:right;color:#808fa6">Contract total</td>
           <td style="text-align:right">${fmtISK(t.buy)} ISK</td>
           <td style="text-align:right">${fmtISK(t.sell)} ISK</td>
         </tr></tfoot>
       </table>`
-      : '<p style="color:#475569;text-align:center;padding:1rem">No items in this contract.</p>';
+      : '<p style="color:#66768c;text-align:center;padding:1rem">No items in this contract.</p>';
 
     return heroImg + meta + table;
   }
@@ -1664,7 +2155,7 @@
                 <td>${systemCell(s)}</td>
                 <td>${posStateBadge(s.state)}</td>
                 <td>${s.onlined_since ? new Date(s.onlined_since).toLocaleDateString() : '–'}</td>
-                <td style="color:#475569;font-size:0.7rem">▼</td>
+                <td style="color:#66768c;font-size:0.7rem">▼</td>
               </tr>
               <tr id="pos-detail-${i}" class="hidden"><td colspan="5" style="background:#181b27;padding:0.75rem"></td></tr>
             `).join('')}
@@ -1713,7 +2204,7 @@
   }
 
   function fuelExpires(iso) {
-    if (!iso) return '<span style="color:#475569">–</span>';
+    if (!iso) return '<span style="color:#66768c">–</span>';
     const diff = new Date(iso) - Date.now();
     const days = Math.floor(diff / 86400000);
     const color = days < 3 ? '#f87171' : days < 7 ? '#fb923c' : '#94a3b8';
@@ -1727,7 +2218,7 @@
       return;
     }
     const cell = row.querySelector('td');
-    cell.innerHTML = '<span style="color:#475569">Loading…</span>';
+    cell.innerHTML = '<span style="color:#66768c">Loading…</span>';
     row.classList.remove('hidden');
     try {
       const r = await fetch(`/api/starbases/${starbaseId}?system_id=${systemId}`);
@@ -1746,7 +2237,7 @@
       `<div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:0.2rem 0">
          <span>${escHtml(f.type_name || 'Type #' + f.type_id)}</span>
          <span style="color:#38bdf8">${fmtNum(f.quantity)}</span>
-       </div>`).join('') || '<div style="color:#475569;font-size:0.8rem">No fuel data.</div>';
+       </div>`).join('') || '<div style="color:#66768c;font-size:0.8rem">No fuel data.</div>';
 
     const access = [
       ['Anchor', d.anchor],
@@ -1757,7 +2248,7 @@
       ['Fuel Take', d.fuel_bay_take],
     ].map(([k, v]) =>
       `<div style="display:flex;justify-content:space-between;font-size:0.75rem;color:#94a3b8;padding:0.15rem 0">
-         <span style="color:#64748b">${k}</span><span>${escHtml(v || '–')}</span>
+         <span style="color:#808fa6">${k}</span><span>${escHtml(v || '–')}</span>
        </div>`).join('');
 
     const flags = [
@@ -1771,11 +2262,11 @@
     return `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
         <div>
-          <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Fuel Bay</div>
+          <div style="font-size:0.7rem;color:#808fa6;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Fuel Bay</div>
           ${fuels}
         </div>
         <div>
-          <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Access Control</div>
+          <div style="font-size:0.7rem;color:#808fa6;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.5rem">Access Control</div>
           ${access}
         </div>
       </div>
@@ -1943,11 +2434,11 @@
             ${fmtISK(m.project_price)} ISK/u
           </span>
         </div>
-        <div style="display:flex;justify-content:space-between;color:#64748b">
+        <div style="display:flex;justify-content:space-between;color:#808fa6">
           <span>Jita 4-4 buy max × ${(m.target_price / m.jita_buy_max).toFixed(2)}</span>
           <span style="color:#94a3b8">${fmtISK(m.target_price)} ISK/u</span>
         </div>
-        <div style="display:flex;justify-content:space-between;color:#475569;font-size:0.7rem;margin-top:0.15rem">
+        <div style="display:flex;justify-content:space-between;color:#66768c;font-size:0.7rem;margin-top:0.15rem">
           <span>Market high (Jita 4-4)</span>
           <span>${fmtISK(m.jita_buy_max)} ISK/u</span>
         </div>
@@ -1980,7 +2471,7 @@
         ${reasonsBlock}
         ${reward}
         ${marketBlock}
-        <div style="margin-top:0.75rem;font-size:0.7rem;color:#475569;display:flex;justify-content:space-between;gap:0.5rem">
+        <div style="margin-top:0.75rem;font-size:0.7rem;color:#66768c;display:flex;justify-content:space-between;gap:0.5rem">
           <span>${p.created ? 'Started: ' + new Date(p.created).toLocaleDateString() : ''}</span>
           <span>Last modified: ${new Date(p.last_modified).toLocaleDateString()}</span>
         </div>
@@ -1989,7 +2480,7 @@
 
   async function openPVPIncomeModal(page = 1) {
     showModal('PVP Income — all-time history',
-      '<div style="color:#475569;text-align:center;padding:1.5rem">Loading…</div>');
+      '<div style="color:#66768c;text-align:center;padding:1.5rem">Loading…</div>');
     try {
       const r = await fetch(`/api/me/pvp-income?page=${page}`);
       if (!r.ok) {
@@ -2012,7 +2503,7 @@
             <td style="text-align:right">${fmtISKLong(e.amount)} ISK</td>
             <td>${escHtml(e.reason || '–')}</td>
           </tr>`).join('')
-      : `<tr><td colspan="3" style="color:#475569;text-align:center;padding:1rem">
+      : `<tr><td colspan="3" style="color:#66768c;text-align:center;padding:1rem">
            No PVP income recorded yet.
          </td></tr>`;
     const prevDisabled = data.page <= 1 ? 'disabled' : '';
@@ -2020,7 +2511,7 @@
     return `
       <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
         <thead>
-          <tr style="color:#64748b;text-transform:uppercase;font-size:0.7rem;letter-spacing:0.06em">
+          <tr style="color:#808fa6;text-transform:uppercase;font-size:0.7rem;letter-spacing:0.06em">
             <th style="text-align:left;padding:0.4rem 0.6rem">Date</th>
             <th style="text-align:right;padding:0.4rem 0.6rem">Amount</th>
             <th style="text-align:left;padding:0.4rem 0.6rem">Reason</th>
@@ -2036,7 +2527,7 @@
         </tfoot>
       </table>
       <div style="display:flex;justify-content:space-between;align-items:center;
-                  margin-top:0.75rem;color:#64748b;font-size:0.75rem">
+                  margin-top:0.75rem;color:#808fa6;font-size:0.75rem">
         <span>Page ${data.page} of ${data.total_pages}</span>
         <div style="display:flex;gap:0.4rem">
           <button class="btn-logout" ${prevDisabled}
@@ -2053,7 +2544,7 @@
       ...(projectsCache?.closed || []),
     ].find(p => p.id === projectId);
     if (!project) return;
-    showModal(project.name, '<div style="color:#475569;text-align:center;padding:1.5rem">Loading contributors…</div>');
+    showModal(project.name, '<div style="color:#66768c;text-align:center;padding:1.5rem">Loading contributors…</div>');
     try {
       const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}/contributors`);
       if (!r.ok) {
@@ -2064,7 +2555,7 @@
       const data = await r.json();
       const hasMarket = !!(project.market && project.market.type_id);
       const priceSlot = hasMarket
-        ? '<div id="price-history-slot"><div style="color:#475569;font-size:0.75rem;text-align:center;padding:0.75rem">Loading price history&hellip;</div></div>'
+        ? '<div id="price-history-slot"><div style="color:#66768c;font-size:0.75rem;text-align:center;padding:0.75rem">Loading price history&hellip;</div></div>'
         : '';
       setModalBody(renderContributors(project, data.contributors || []) + priceSlot);
       if (hasMarket) loadPriceHistory(project);
@@ -2075,7 +2566,7 @@
 
   function renderContributors(project, contributors) {
     if (!contributors.length) {
-      return '<p style="color:#475569;text-align:center;padding:1rem">No contributors yet.</p>';
+      return '<p style="color:#66768c;text-align:center;padding:1rem">No contributors yet.</p>';
     }
     const sorted = [...contributors].sort((a, b) => b.contributed - a.contributed);
     const totalContributed = sorted.reduce((s, c) => s + (c.contributed || 0), 0);
@@ -2083,7 +2574,7 @@
     const desired = project.progress?.desired || 0;
     const pctDone = desired ? Math.min(100, (projTotal / desired) * 100) : 0;
     const rewardLine = project.reward ? `
-      <div style="display:flex;justify-content:space-between;color:#64748b;font-size:0.7rem;margin-top:0.2rem">
+      <div style="display:flex;justify-content:space-between;color:#808fa6;font-size:0.7rem;margin-top:0.2rem">
         <span>Reward pool</span>
         <span>${fmtISK(project.reward.remaining || 0)} / ${fmtISK(project.reward.initial || 0)} ISK remaining</span>
       </div>` : '';
@@ -2111,7 +2602,7 @@
       return `
         <div style="display:grid;grid-template-columns:24px 36px 1fr auto;gap:0.75rem;
                     align-items:center;padding:0.5rem 0;border-bottom:1px solid #1a1e2e">
-          <span style="color:#475569;font-size:0.75rem;text-align:right;font-variant-numeric:tabular-nums">${i + 1}</span>
+          <span style="color:#66768c;font-size:0.75rem;text-align:right;font-variant-numeric:tabular-nums">${i + 1}</span>
           <img src="https://images.evetech.net/characters/${c.id}/portrait?size=64"
                alt="" style="width:32px;height:32px;border-radius:50%;background:#252a3d">
           <div style="min-width:0">
@@ -2122,17 +2613,17 @@
             <div style="height:4px;background:#252a3d;border-radius:2px;margin-top:0.3rem;overflow:hidden">
               <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
             </div>
-            ${isoLast ? `<div style="font-size:0.65rem;color:#475569;margin-top:0.15rem">last contribution ${isoLast}</div>` : ''}
+            ${isoLast ? `<div style="font-size:0.65rem;color:#66768c;margin-top:0.15rem">last contribution ${isoLast}</div>` : ''}
           </div>
           <div style="text-align:right">
             <div style="color:#38bdf8;font-weight:600;font-size:0.85rem">${fmtNum(c.contributed)}</div>
-            <div style="color:#64748b;font-size:0.7rem">${pct.toFixed(1)}%</div>
+            <div style="color:#808fa6;font-size:0.7rem">${pct.toFixed(1)}%</div>
           </div>
         </div>`;
     }).join('');
     return `
       <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #2d3348">
-        <div style="font-size:0.7rem;font-weight:600;color:#64748b;text-transform:uppercase;
+        <div style="font-size:0.7rem;font-weight:600;color:#808fa6;text-transform:uppercase;
                     letter-spacing:0.08em;margin-bottom:0.5rem">All participants</div>
         ${rows}
       </div>`;
@@ -2140,13 +2631,13 @@
 
   const PIE_COLORS = ['#38bdf8', '#4ade80', '#fbbf24', '#f87171', '#a78bfa',
                       '#fb923c', '#2dd4bf', '#f472b6', '#60a5fa', '#a3e635'];
-  const PIE_OTHERS_COLOR = '#475569';
+  const PIE_OTHERS_COLOR = '#66768c';
 
   // Donut pie of contributor share + compact legend. `sorted` is contributors
   // sorted by contributed desc; `total` is the sum of all contributed.
   function renderContributorPie(sorted, total) {
     if (total <= 0) {
-      return '<p style="color:#475569;text-align:center;padding:1rem">No contributions recorded.</p>';
+      return '<p style="color:#66768c;text-align:center;padding:1rem">No contributions recorded.</p>';
     }
     // Top 10 contributors as slices; rank 11+ collapse into one "Others" slice.
     const slices = sorted.slice(0, 10).map((c, i) => ({
@@ -2178,7 +2669,7 @@
         <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem;padding:0.15rem 0">
           <span style="width:10px;height:10px;border-radius:2px;background:${s.color};flex:0 0 auto"></span>
           <span style="color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto">${escHtml(s.label)}</span>
-          <span style="color:#64748b;font-variant-numeric:tabular-nums;flex:0 0 auto">${pct}%</span>
+          <span style="color:#808fa6;font-variant-numeric:tabular-nums;flex:0 0 auto">${pct}%</span>
         </div>`;
     }).join('');
 
@@ -2196,10 +2687,10 @@
   // is drawn as a dashed reference line, or null to omit it.
   function renderPriceHistoryChart(history, projectPrice) {
     const open = `<div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid #2d3348">
-      <div style="font-size:0.7rem;font-weight:600;color:#64748b;text-transform:uppercase;
+      <div style="font-size:0.7rem;font-weight:600;color:#808fa6;text-transform:uppercase;
                   letter-spacing:0.08em;margin-bottom:0.5rem">Jita price &middot; last 90 days</div>`;
     if (!Array.isArray(history) || history.length < 2) {
-      return open + '<div style="color:#475569;font-size:0.75rem;text-align:center;padding:0.5rem">Price history unavailable</div></div>';
+      return open + '<div style="color:#66768c;font-size:0.75rem;text-align:center;padding:0.5rem">Price history unavailable</div></div>';
     }
 
     const W = 460, H = 170, padL = 64, padR = 12, padT = 12, padB = 26;
@@ -2240,7 +2731,7 @@
         <line x1="${padL}" y1="${yy.toFixed(1)}" x2="${(padL + plotW).toFixed(1)}" y2="${yy.toFixed(1)}"
               stroke="#1a1e2e" stroke-width="1"/>
         <text x="${padL - 6}" y="${(yy + 3).toFixed(1)}" text-anchor="end"
-              fill="#475569" font-size="9">${escHtml(fmtISK(v))}</text>`;
+              fill="#66768c" font-size="9">${escHtml(fmtISK(v))}</text>`;
     }).join('');
 
     const xIdx = n > 2 ? [0, Math.floor((n - 1) / 2), n - 1] : [0, n - 1];
@@ -2249,11 +2740,11 @@
       const lbl = `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
       const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
       return `<text x="${xAt(i).toFixed(1)}" y="${H - 8}" text-anchor="${anchor}"
-                   fill="#475569" font-size="9">${lbl}</text>`;
+                   fill="#66768c" font-size="9">${lbl}</text>`;
     }).join('');
 
     const summary = `
-      <div style="display:flex;gap:1rem;font-size:0.7rem;color:#64748b;margin-top:0.3rem;flex-wrap:wrap">
+      <div style="display:flex;gap:1rem;font-size:0.7rem;color:#808fa6;margin-top:0.3rem;flex-wrap:wrap">
         <span>Latest <b style="color:#e2e8f0">${escHtml(fmtISK(history[n - 1].average))}</b></span>
         <span>90d high <b style="color:#e2e8f0">${escHtml(fmtISK(Math.max(...highs)))}</b></span>
         <span>90d low <b style="color:#e2e8f0">${escHtml(fmtISK(Math.min(...lows)))}</b></span>
@@ -2365,7 +2856,7 @@
     const tree = data.tree;
     const treeBlock = tree
       ? renderFleetComparison(tree, saved)
-      : '<p style="color:#475569;font-size:0.85rem;padding:0.5rem 0">Fleet roster unavailable.</p>';
+      : '<p style="color:#66768c;font-size:0.85rem;padding:0.5rem 0">Fleet roster unavailable.</p>';
 
     content.innerHTML = `
       <div class="card full">
@@ -2394,12 +2885,12 @@
              <div style="font-size:0.85rem;color:#e2e8f0;font-weight:600">
                ${escHtml(bossName)} ${characterZkillLink(bossId)}
              </div>
-             <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">
+             <div style="font-size:0.65rem;color:#66768c;text-transform:uppercase;letter-spacing:0.06em">
                Fleet Boss
              </div>
            </div>
          </div>`
-      : '<span style="color:#475569">No boss info</span>';
+      : '<span style="color:#66768c">No boss info</span>';
     return `
       <div class="fleet-info">
         <div class="fi-cell">
@@ -2438,7 +2929,7 @@
       </div>`;
     const cells = [
       cell('Fleet ID', `<span style="font-size:0.95rem">${info.fleet_id || '–'}</span>`),
-      cell('Members', info.member_count != null ? fmtNum(info.member_count) : '<span style="color:#475569;font-size:0.95rem">–</span>'),
+      cell('Members', info.member_count != null ? fmtNum(info.member_count) : '<span style="color:#66768c;font-size:0.95rem">–</span>'),
     ];
     if (info.wing_count != null) cells.push(cell('Wings', fmtNum(info.wing_count)));
     if (includeSaved)            cells.push(cell('Saved', fmtNum(savedCount)));
@@ -2807,7 +3298,7 @@
           <button class="btn-logout" onclick="adminRemoveProjectSetting('${escAttr(p.project_name)}')">Remove</button>
         </td>
       </tr>`).join('') || `
-      <tr><td colspan="5" style="color:#475569;text-align:center;padding:0.75rem 0;font-style:italic">
+      <tr><td colspan="5" style="color:#66768c;text-align:center;padding:0.75rem 0;font-style:italic">
         No project settings. Add a project name below.
       </td></tr>`;
     document.getElementById('admin-projects').innerHTML = `
@@ -2817,7 +3308,7 @@
           <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.special).length} special</span>
           <span class="badge badge-muted" style="margin-left:0.4rem">${list.filter(p => p.track).length} track</span>
         </div>
-        <p style="color:#64748b;font-size:0.75rem;margin-bottom:0.75rem">
+        <p style="color:#808fa6;font-size:0.75rem;margin-bottom:0.75rem">
           <b>Fixed Price</b> exempts a project from the Jita 4-4 price-difference warnings.
           <b>Special</b> shows the top contributors on the project card and the full
           participant list in its details popup.
@@ -2939,7 +3430,7 @@
     const rows = list.map(c => `
       <tr>
         <td style="color:#e2e8f0;font-weight:600">${escHtml(c.name)}</td>
-        <td style="color:#64748b;font-size:0.75rem">${c.kind === 'memory' ? 'in-memory' : 'database'}</td>
+        <td style="color:#808fa6;font-size:0.75rem">${c.kind === 'memory' ? 'in-memory' : 'database'}</td>
         <td style="color:#38bdf8;font-variant-numeric:tabular-nums">${fmtNum(c.rows)}</td>
         <td>
           <button class="btn-logout" onclick="adminPurgeCache('${c.name}')"
@@ -3008,7 +3499,7 @@
             <span>${escHtml(u.character_name || 'Unknown')}</span>
             ${characterZkillLink(u.character_id)}
           </td>
-          <td style="color:#64748b;font-size:0.75rem;font-variant-numeric:tabular-nums">${u.character_id}</td>
+          <td style="color:#808fa6;font-size:0.75rem;font-variant-numeric:tabular-nums">${u.character_id}</td>
           <td style="color:#94a3b8">${created}</td>
           <td style="color:#94a3b8">${login}</td>
           <td style="color:#94a3b8">${seen}</td>
@@ -3162,7 +3653,7 @@
     const secSign      = p && p.security_status >= 0 ? '+' : '';
     const onlineDot = o?.is_online
       ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;margin-right:0.4rem"></span>'
-      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#475569;margin-right:0.4rem"></span>';
+      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#66768c;margin-right:0.4rem"></span>';
     const onlineLabel = onlineErr ? 'Online status unavailable' : (o?.is_online ? 'Online' : 'Offline');
 
     const w = walletDisplay(wallet);
@@ -3268,7 +3759,7 @@
                     alt="" style="width:48px;height:48px;border-radius:4px;background:#1e2130">`
             : ''}
           <div style="flex:1;min-width:0">
-            <div style="font-size:0.7rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em">Active Ship</div>
+            <div style="font-size:0.7rem;color:#66768c;text-transform:uppercase;letter-spacing:0.06em">Active Ship</div>
             <div style="font-size:0.9rem;color:#e2e8f0;font-weight:600;
                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               ${escHtml(ship?.name || '–')}
@@ -3332,7 +3823,7 @@
     const rows = attrs.map(([label, val]) => `
       <div style="display:grid;grid-template-columns:90px 1fr 30px;align-items:center;gap:0.5rem;
                   padding:0.2rem 0;font-size:0.78rem">
-        <span style="color:#64748b">${label}</span>
+        <span style="color:#808fa6">${label}</span>
         <div style="height:5px;background:#252a3d;border-radius:3px;overflow:hidden">
           <div style="height:100%;background:#38bdf8;width:${((val || 0) / maxVal * 100).toFixed(0)}%"></div>
         </div>
@@ -3345,7 +3836,7 @@
         <div class="card-title">Attributes</div>
         ${rows}
         <div style="margin-top:0.6rem;display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;
-                    font-size:0.7rem;color:#64748b">
+                    font-size:0.7rem;color:#808fa6">
           <div>
             <div style="text-transform:uppercase;letter-spacing:0.06em">Last Remap</div>
             <div style="color:#94a3b8;font-size:0.8rem;margin-top:0.15rem">${lastRemap}</div>
@@ -3366,7 +3857,7 @@
     }
     if (!queue?.length) {
       return `<div class="card"><div class="card-title">Skill Queue</div>
-        <p style="color:#475569;font-size:0.85rem;padding:0.5rem 0">Queue is empty.</p></div>`;
+        <p style="color:#66768c;font-size:0.85rem;padding:0.5rem 0">Queue is empty.</p></div>`;
     }
     const now = Date.now();
     const current = queue.find(s => {
@@ -3406,7 +3897,7 @@
               <div style="height:6px;background:#1a1e2e;border-radius:3px;overflow:hidden">
                 <div style="height:100%;background:#38bdf8;width:${barPct.toFixed(1)}%"></div>
               </div>
-              <div style="font-size:0.7rem;color:#64748b;margin-top:0.3rem">
+              <div style="font-size:0.7rem;color:#808fa6;margin-top:0.3rem">
                 ${fmtNum(currentSP)} / ${fmtNum(endSP)} SP
               </div>
             </div>`;
@@ -3416,7 +3907,7 @@
     const upcoming = queue.filter(s => s !== current).slice(0, 6);
     const upcomingBlock = upcoming.length ? `
       <div style="margin-top:0.7rem">
-        <div style="font-size:0.65rem;color:#475569;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem">
+        <div style="font-size:0.65rem;color:#66768c;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.3rem">
           Next ${upcoming.length} of ${queue.length - (current ? 1 : 0)} queued
         </div>
         ${upcoming.map(s => `
@@ -3424,7 +3915,7 @@
                       padding:0.25rem 0;border-bottom:1px solid #1a1e2e;color:#94a3b8">
             <span>${escHtml(s.skill_name || 'Skill #' + s.skill_id)}
               <span style="color:#38bdf8">${romanLevel(s.finished_level)}</span></span>
-            <span style="color:#64748b">${s.finish_date ? new Date(s.finish_date).toLocaleDateString() : '–'}</span>
+            <span style="color:#808fa6">${s.finish_date ? new Date(s.finish_date).toLocaleDateString() : '–'}</span>
           </div>`).join('')}
       </div>` : '';
 
@@ -3497,7 +3988,7 @@
     // 20% scale numbers along the top axis
     const scaleNumbers = [20, 40, 60, 80, 100].map(v => {
       const r = (v / 100) * radius;
-      return `<text x="${cx + 2}" y="${cy - r}" fill="#475569" font-size="7"
+      return `<text x="${cx + 2}" y="${cy - r}" fill="#66768c" font-size="7"
                    text-anchor="start" dominant-baseline="middle">${v}</text>`;
     }).join('');
 
@@ -3644,13 +4135,13 @@
       critical: '<span style="color:#f87171;font-size:0.7rem;font-weight:700;text-transform:uppercase">Critical</span>',
       warning:  '<span style="color:#fb923c;font-size:0.7rem;font-weight:700;text-transform:uppercase">Warning</span>',
       ok:       '<span style="color:#4ade80;font-size:0.7rem;font-weight:700;text-transform:uppercase">OK</span>',
-      done:     '<span style="color:#475569;font-size:0.7rem;font-weight:700;text-transform:uppercase">Done</span>',
+      done:     '<span style="color:#66768c;font-size:0.7rem;font-weight:700;text-transform:uppercase">Done</span>',
     }[cat];
     return `<tr class="pc-${cat}">
       <td class="pc-priority-cell">${catLabel}</td>
       <td style="color:#e2e8f0">
         <div style="font-weight:500">${escHtml(c.title || ('Contract #' + c.contract_id))}</div>
-        <div style="color:#64748b;font-size:0.7rem;margin-top:0.1rem">
+        <div style="color:#808fa6;font-size:0.7rem;margin-top:0.1rem">
           ${typeLabel(c.type)} · ${escHtml(c.status || '')}
         </div>
         ${attention}

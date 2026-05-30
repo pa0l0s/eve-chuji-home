@@ -367,6 +367,26 @@ async def get_corp_project_detail(corporation_id: int, project_id: str, access_t
         return r.json()
 
 
+async def get_contacts(character_id: int, access_token: str) -> list[dict]:
+    """All of the character's contacts (walks X-Pages)."""
+    result: list[dict] = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/characters/{character_id}/contacts/",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"page": page},
+            )
+            r.raise_for_status()
+            batch = r.json() or []
+            result.extend(batch)
+            if page >= int(r.headers.get("X-Pages", "1")):
+                break
+            page += 1
+    return result
+
+
 async def resolve_names(ids: list[int]) -> dict[int, str]:
     """Resolve character / corp / alliance IDs to names via ESI /universe/names/."""
     clean = [i for i in {*ids} if i]
@@ -592,6 +612,145 @@ async def get_jita_buy_max(type_id: int) -> float | None:
             return max(jita) if jita else None
         except httpx.HTTPError:
             return None
+
+
+# ── Mail (read) ──────────────────────────────────────────────────────────────
+
+async def get_mail_headers(character_id: int, access_token: str,
+                           labels: list[int] | None = None,
+                           last_mail_id: int | None = None) -> list[dict]:
+    """Up to 50 mail headers, newest first. `last_mail_id` pages older."""
+    params: dict = {}
+    if labels:
+        params["labels"] = ",".join(str(l) for l in labels)
+    if last_mail_id:
+        params["last_mail_id"] = last_mail_id
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params=params,
+        )
+        r.raise_for_status()
+        return r.json() or []
+
+
+async def get_mail(character_id: int, access_token: str, mail_id: int) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/{mail_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_mail_labels(character_id: int, access_token: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/labels/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_mailing_lists(character_id: int, access_token: str) -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/lists/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json() or []
+
+
+# ── Mail (write / organize / send) ───────────────────────────────────────────
+
+async def set_mail(character_id: int, access_token: str, mail_id: int,
+                   read: bool | None = None, labels: list[int] | None = None) -> None:
+    """Mark read/unread and/or replace the mail's labels."""
+    payload: dict = {}
+    if read is not None:
+        payload["read"] = read
+    if labels is not None:
+        payload["labels"] = labels
+    async with httpx.AsyncClient() as client:
+        r = await client.put(
+            f"{ESI_BASE}/characters/{character_id}/mail/{mail_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json=payload,
+        )
+        r.raise_for_status()
+
+
+async def delete_mail(character_id: int, access_token: str, mail_id: int) -> None:
+    async with httpx.AsyncClient() as client:
+        r = await client.delete(
+            f"{ESI_BASE}/characters/{character_id}/mail/{mail_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+
+
+async def create_mail_label(character_id: int, access_token: str,
+                            name: str, color: str) -> int:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{ESI_BASE}/characters/{character_id}/mail/labels/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"name": name, "color": color},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def delete_mail_label(character_id: int, access_token: str, label_id: int) -> None:
+    async with httpx.AsyncClient() as client:
+        r = await client.delete(
+            f"{ESI_BASE}/characters/{character_id}/mail/labels/{label_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+
+
+async def send_mail(character_id: int, access_token: str, recipients: list[dict],
+                    subject: str, body: str, approved_cost: int = 0) -> int:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{ESI_BASE}/characters/{character_id}/mail/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"recipients": recipients, "subject": subject,
+                  "body": body, "approved_cost": approved_cost},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def resolve_recipient_ids(names: list[str]) -> list[dict]:
+    """Resolve names to mail recipients via /universe/ids/.
+    Returns [{recipient_id, recipient_type, name}] for characters/corps/alliances."""
+    clean = list({n for n in names if n})
+    if not clean:
+        return []
+    type_map = {
+        "characters": "character",
+        "corporations": "corporation",
+        "alliances": "alliance",
+    }
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.post(f"{ESI_BASE}/universe/ids/", json=clean)
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPError:
+            return []
+    out: list[dict] = []
+    for key, rtype in type_map.items():
+        for item in data.get(key, []):
+            out.append({"recipient_id": item["id"],
+                        "recipient_type": rtype, "name": item["name"]})
+    return out
 
 
 async def get_jita_sell_min(type_id: int) -> float | None:
