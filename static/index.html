@@ -72,6 +72,17 @@
     .nav-btn:hover { color: #e2e8f0; background: #252a3d; }
     .nav-btn.active { color: #38bdf8; background: #0c2233; }
 
+    .nav-mail-btn { position: relative; display: inline-flex; align-items: center; }
+    .nav-mail-btn.has-unread { color: #38bdf8; }
+    .mail-badge {
+      position: absolute; top: 0; right: 0;
+      transform: translate(35%, -35%);
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 8px; background: #ef4444; color: #fff;
+      font-size: 0.65rem; font-weight: 700; line-height: 16px;
+      text-align: center; font-variant-numeric: tabular-nums;
+    }
+
     .nav-right { display: flex; align-items: center; gap: 0.75rem; }
 
     .tq-status {
@@ -840,6 +851,13 @@
       <button class="nav-btn hidden" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-fleet" onclick="showView('fleet')">Fleet</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
+      <button class="nav-btn nav-mail-btn" id="btn-mail" onclick="showView('mail')" title="Mail" aria-label="Mail">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+          <path d="m22 7-10 6L2 7"></path>
+        </svg>
+        <span class="mail-badge hidden" id="mail-badge">0</span>
+      </button>
       <button class="nav-btn hidden" id="btn-admin" onclick="showView('admin')">Admin</button>
     </div>
     <div class="nav-right">
@@ -955,6 +973,10 @@
       <div class="page-title">Member Profile</div>
       <div id="member-grid" class="layout"></div>
     </div>
+
+    <!-- Mail view (implemented in Task 7) -->
+    <div id="view-mail" class="hidden">
+    </div>
   </main>
 
 </div>
@@ -990,6 +1012,7 @@
       showView('contracts');
       pollServerStatus();
       pollWallet();
+      pollMailBadge();
     } catch { show('view-login'); }
   }
 
@@ -1011,6 +1034,28 @@
     el.classList.remove('hidden');
     el.querySelector('.nw-val').textContent = w.value;
     el.title = w.tooltip;
+  }
+
+  async function pollMailBadge() {
+    try {
+      const r = await fetch('/api/me/mail/unread');
+      if (r.ok) updateMailBadge((await r.json()).inbox_unread);
+    } catch {}
+    if (!document.hidden) setTimeout(pollMailBadge, 60000);
+  }
+
+  function updateMailBadge(count) {
+    const btn = document.getElementById('btn-mail');
+    const badge = document.getElementById('mail-badge');
+    if (!btn || !badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.remove('hidden');
+      btn.classList.add('has-unread');
+    } else {
+      badge.classList.add('hidden');
+      btn.classList.remove('has-unread');
+    }
   }
 
   async function pollServerStatus() {
@@ -1051,7 +1096,7 @@
 
   function showView(view) {
     currentView = view;
-    ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin'].forEach(v => {
+    ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin', 'mail'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
@@ -1066,16 +1111,22 @@
     if (view === 'fleet') loadFleet();
     if (view === 'member') loadMember();
     if (view === 'admin') loadAdmin();
+    if (view === 'mail') loadMail();
   }
 
   // Pause/resume contract auto-refresh based on tab visibility.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       if (contractsTimer) { clearTimeout(contractsTimer); contractsTimer = null; }
-    } else if (currentView === 'contracts' && !contractsTimer) {
-      loadContracts();  // resume — fetch once and reschedule
+    } else {
+      if (currentView === 'contracts' && !contractsTimer) loadContracts();  // resume — fetch once and reschedule
+      pollMailBadge();
     }
   });
+
+  // ── Mail (stub — implemented in Task 7) ──────────────────────────────────
+
+  async function loadMail() { /* implemented in Task 7 */ }
 
   // ── Contracts ─────────────────────────────────────────────────────────────
 
