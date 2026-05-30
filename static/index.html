@@ -1341,8 +1341,69 @@
     mailState.lastOpened = m;
   }
 
-  // Temporary sanitizer — replaced by the DOM-based version in Task 9.
-  function sanitizeEveMail(s){ const d=document.createElement('div'); d.textContent=s; return d; }
+  // Render EVE mail body safely: allow text, <br>, basic styling, http links;
+  // neutralize client-only links (showinfo:/killReport:) to non-clickable text.
+  function sanitizeEveMail(raw) {
+    const out = document.createElement('div');
+    // Parse the EVE markup in an inert document (no scripts/resource loads run).
+    const doc = new DOMParser().parseFromString(raw, 'text/html');
+    const allowed = new Set(['BR', 'B', 'I', 'U', 'FONT', 'A', 'LOC', 'SPAN', 'DIV', 'P']);
+
+    function argbToRgb(c) {
+      if (!c) return null;
+      const m = String(c).replace('#', '');
+      if (m.length === 8) return '#' + m.slice(2);   // strip AA from #AARRGGBB
+      if (m.length === 6) return '#' + m;
+      return null;
+    }
+
+    function walk(src, dst) {
+      src.childNodes.forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          dst.appendChild(document.createTextNode(node.nodeValue));
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        const tag = node.tagName;
+        if (!allowed.has(tag)) { walk(node, dst); return; }  // unwrap unknown tags
+
+        if (tag === 'BR') { dst.appendChild(document.createElement('br')); return; }
+
+        if (tag === 'A') {
+          const href = node.getAttribute('href') || '';
+          if (/^https?:\/\//i.test(href)) {
+            const a = document.createElement('a');
+            a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+            a.style.color = '#38bdf8';
+            walk(node, a); dst.appendChild(a);
+          } else {
+            // showinfo:/killReport:/etc — client-only, render as plain styled text
+            const span = document.createElement('span');
+            span.className = 'mail-link-disabled';
+            walk(node, span); dst.appendChild(span);
+          }
+          return;
+        }
+
+        if (tag === 'FONT') {
+          const span = document.createElement('span');
+          const rgb = argbToRgb(node.getAttribute('color'));
+          if (rgb) span.style.color = rgb;
+          walk(node, span); dst.appendChild(span);
+          return;
+        }
+
+        if (tag === 'LOC') { walk(node, dst); return; }  // unwrap <loc>
+
+        // B / I / U / SPAN / DIV / P — keep the tag, drop all attributes
+        const safe = document.createElement(tag.toLowerCase());
+        walk(node, safe); dst.appendChild(safe);
+      });
+    }
+
+    walk(doc.body, out);
+    return out;
+  }
 
   async function markMailRead(mailId, read, refreshRow) {
     try {
