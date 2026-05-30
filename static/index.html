@@ -1375,13 +1375,21 @@
 
         if (tag === 'A') {
           const href = node.getAttribute('href') || '';
+          // killReport:<killmail_id>:<hash> → public zKillboard page.
+          const kill = href.match(/^killReport:(\d+):/i);
           if (/^https?:\/\//i.test(href)) {
             const a = document.createElement('a');
             a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
             a.style.color = '#38bdf8';
             walk(node, a); dst.appendChild(a);
+          } else if (kill) {
+            const a = document.createElement('a');
+            a.href = 'https://zkillboard.com/kill/' + kill[1] + '/';
+            a.target = '_blank'; a.rel = 'noopener noreferrer';
+            a.style.color = '#38bdf8';
+            walk(node, a); dst.appendChild(a);
           } else {
-            // showinfo:/killReport:/etc — client-only, render as plain styled text
+            // showinfo:/etc — client-only, render as plain styled text
             const span = document.createElement('span');
             span.className = 'mail-link-disabled';
             walk(node, span); dst.appendChild(span);
