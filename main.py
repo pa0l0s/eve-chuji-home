@@ -1505,6 +1505,99 @@ async def my_mail_unread(session: str | None = Cookie(None)):
     return {"inbox_unread": count}
 
 
+@app.post("/api/me/mail/resolve")
+async def my_mail_resolve(body: dict, session: str | None = Cookie(None)):
+    await get_current_character_id(session)
+    names = body.get("names") or []
+    return await resolve_recipient_ids(names)
+
+
+@app.post("/api/me/mail/labels")
+async def my_mail_create_label(body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    name = (body.get("name") or "").strip()
+    color = body.get("color") or "#ffffff"
+    if not name:
+        raise HTTPException(status_code=400, detail="Label name required")
+    try:
+        access_token = await get_valid_token(character_id)
+        label_id = await create_mail_label(character_id, access_token, name, color)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"label_id": label_id}
+
+
+@app.delete("/api/me/mail/labels/{label_id}")
+async def my_mail_delete_label(label_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        await delete_mail_label(character_id, access_token, label_id)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"ok": True}
+
+
+@app.post("/api/me/mail")
+async def my_mail_send(body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    recipients = body.get("recipients") or []
+    subject = (body.get("subject") or "").strip()
+    text = body.get("body") or ""
+    if not recipients or not subject:
+        raise HTTPException(status_code=400, detail="Recipients and subject required")
+    try:
+        access_token = await get_valid_token(character_id)
+        mail_id = await send_mail(character_id, access_token, recipients, subject, text,
+                                  approved_cost=int(body.get("approved_cost", 0)))
+    except httpx.HTTPStatusError as e:
+        print(f"ESI mail send HTTP {e.response.status_code}: {e.response.text}")
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403,
+                detail="Mail scope not granted — log out and back in to enable Mail.")
+        raise HTTPException(status_code=502, detail=f"Send failed: {e.response.text}")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    _mail_unread_cache.pop(character_id, None)
+    return {"mail_id": mail_id}
+
+
+@app.put("/api/me/mail/{mail_id}")
+async def my_mail_update(mail_id: int, body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    read = body.get("read")
+    label_ids = body.get("labels")
+    try:
+        access_token = await get_valid_token(character_id)
+        await set_mail(character_id, access_token, mail_id, read=read, labels=label_ids)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    _mail_unread_cache.pop(character_id, None)
+    _mail_body_cache.pop((character_id, mail_id), None)
+    return {"ok": True}
+
+
+@app.delete("/api/me/mail/{mail_id}")
+async def my_mail_delete(mail_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        await delete_mail(character_id, access_token, mail_id)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    _mail_unread_cache.pop(character_id, None)
+    _mail_body_cache.pop((character_id, mail_id), None)
+    return {"ok": True}
+
+
 @app.get("/api/me/mail/{mail_id}")
 async def my_mail_detail(mail_id: int, session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)

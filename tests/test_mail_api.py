@@ -87,3 +87,68 @@ async def test_mail_unread_returns_inbox_count(client):
     r = await client.get("/api/me/mail/unread", cookies=cookies)
     assert r.status_code == 200
     assert r.json()["inbox_unread"] == 8
+
+
+@respx.mock
+async def test_set_mail_read(client):
+    cookies = await _auth()
+    route = respx.put(f"{BASE}/mail/42/").mock(return_value=Response(204))
+    r = await client.put("/api/me/mail/42", json={"read": True}, cookies=cookies)
+    assert r.status_code == 200
+    assert route.called
+
+
+@respx.mock
+async def test_delete_mail_route(client):
+    cookies = await _auth()
+    route = respx.delete(f"{BASE}/mail/42/").mock(return_value=Response(204))
+    r = await client.delete("/api/me/mail/42", cookies=cookies)
+    assert r.status_code == 200
+    assert route.called
+
+
+@respx.mock
+async def test_create_and_delete_label(client):
+    cookies = await _auth()
+    respx.post(f"{BASE}/mail/labels/").mock(return_value=Response(201, json=128))
+    r = await client.post("/api/me/mail/labels",
+                          json={"name": "Mine", "color": "#ff0000"}, cookies=cookies)
+    assert r.status_code == 200
+    assert r.json()["label_id"] == 128
+    route = respx.delete(f"{BASE}/mail/labels/128/").mock(return_value=Response(204))
+    r2 = await client.delete("/api/me/mail/labels/128", cookies=cookies)
+    assert r2.status_code == 200
+    assert route.called
+
+
+@respx.mock
+async def test_send_mail_route(client):
+    cookies = await _auth()
+    respx.post(f"{BASE}/mail/").mock(return_value=Response(201, json=999))
+    r = await client.post("/api/me/mail", cookies=cookies, json={
+        "recipients": [{"recipient_id": 5, "recipient_type": "character"}],
+        "subject": "s", "body": "b"})
+    assert r.status_code == 200
+    assert r.json()["mail_id"] == 999
+
+
+@respx.mock
+async def test_send_mail_propagates_esi_error(client):
+    cookies = await _auth()
+    respx.post(f"{BASE}/mail/").mock(return_value=Response(
+        520, json={"error": "ContactCostNotApproved"}))
+    r = await client.post("/api/me/mail", cookies=cookies, json={
+        "recipients": [{"recipient_id": 5, "recipient_type": "character"}],
+        "subject": "s", "body": "b"})
+    assert r.status_code == 502
+    assert "ContactCostNotApproved" in r.json()["detail"]
+
+
+@respx.mock
+async def test_resolve_recipients_route(client):
+    cookies = await _auth()
+    respx.post("https://esi.evetech.net/latest/universe/ids/").mock(
+        return_value=Response(200, json={"characters": [{"id": 5, "name": "Bob"}]}))
+    r = await client.post("/api/me/mail/resolve", json={"names": ["Bob"]}, cookies=cookies)
+    assert r.status_code == 200
+    assert r.json()[0]["recipient_id"] == 5
