@@ -906,13 +906,6 @@
       <button class="nav-btn hidden" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-fleet" onclick="showView('fleet')">Fleet</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
-      <button class="nav-btn nav-mail-btn" id="btn-mail" onclick="showView('mail')" title="Mail" aria-label="Mail">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="2" y="4" width="20" height="16" rx="2"></rect>
-          <path d="m22 7-10 6L2 7"></path>
-        </svg>
-        <span class="mail-badge hidden" id="mail-badge">0</span>
-      </button>
       <button class="nav-btn hidden" id="btn-admin" onclick="showView('admin')">Admin</button>
     </div>
     <div class="nav-right">
@@ -922,6 +915,13 @@
       <div class="nav-wallet hidden" id="nav-wallet" title="Wallet balance">
         <span class="nw-label">ISK</span><span class="nw-val">–</span>
       </div>
+      <button class="nav-btn nav-mail-btn" id="btn-mail" onclick="showView('mail')" title="Mail" aria-label="Mail">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+          <path d="m22 7-10 6L2 7"></path>
+        </svg>
+        <span class="mail-badge hidden" id="mail-badge">0</span>
+      </button>
       <div class="nav-char">
         <img id="nav-portrait" class="nav-portrait" src="" alt="">
         <span id="nav-name"></span>
