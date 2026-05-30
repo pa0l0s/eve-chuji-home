@@ -1192,7 +1192,7 @@
 
   // ── Mail ──────────────────────────────────────────────────────────────────
   let mailState = { labels: [], lists: [], total: 0, current: { type: 'label', id: 1 },
-                    headers: [], lastMailId: null, selectedId: null, lastOpened: null };
+                    headers: [], lastMailId: null, selectedId: null, lastOpened: null, hasMore: false };
 
   const MAIL_SYSTEM_LABELS = { 1: 'Inbox', 2: 'Sent', 4: '[Corp]', 8: '[Alliance]' };
 
@@ -1273,7 +1273,8 @@
       }
       mailState.headers = append ? mailState.headers.concat(rows) : rows;
       if (rows.length) mailState.lastMailId = rows[rows.length - 1].mail_id;
-      renderMailList(rows.length >= 50);
+      mailState.hasMore = rows.length >= 50;
+      renderMailList(mailState.hasMore);
     } catch { showError('mail-error', 'Network error — could not load mail.'); }
   }
 
@@ -1305,7 +1306,7 @@
 
   async function openMail(mailId) {
     mailState.selectedId = mailId;
-    renderMailList(mailState.headers.length >= 50);
+    renderMailList(mailState.hasMore);
     const reader = document.getElementById('mail-reader');
     reader.innerHTML = '<div class="mail-reader-empty">Loading…</div>';
     try {
@@ -1316,7 +1317,7 @@
       const header = mailState.headers.find(h => h.mail_id === mailId);
       if (header && !header.is_read) {
         header.is_read = true;
-        renderMailList(mailState.headers.length >= 50);
+        renderMailList(mailState.hasMore);
         markMailRead(mailId, true);
       }
     } catch { reader.innerHTML = '<div class="mail-reader-empty">Network error.</div>'; }
@@ -1413,7 +1414,7 @@
     } catch {}
     if (refreshRow) {
       const h = mailState.headers.find(x => x.mail_id === mailId);
-      if (h) { h.is_read = read; renderMailList(mailState.headers.length >= 50); }
+      if (h) { h.is_read = read; renderMailList(mailState.hasMore); }
     }
     pollMailBadgeOnce();
   }
@@ -1426,7 +1427,7 @@
     } catch { showError('mail-error', 'Network error.'); return; }
     mailState.headers = mailState.headers.filter(x => x.mail_id !== mailId);
     mailState.selectedId = null;
-    renderMailList(mailState.headers.length >= 50);
+    renderMailList(mailState.hasMore);
     document.getElementById('mail-reader').innerHTML =
       '<div class="mail-reader-empty">Select a mail to read.</div>';
     pollMailBadgeOnce();
