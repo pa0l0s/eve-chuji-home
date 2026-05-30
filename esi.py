@@ -367,6 +367,26 @@ async def get_corp_project_detail(corporation_id: int, project_id: str, access_t
         return r.json()
 
 
+async def get_contacts(character_id: int, access_token: str) -> list[dict]:
+    """All of the character's contacts (walks X-Pages)."""
+    result: list[dict] = []
+    page = 1
+    async with httpx.AsyncClient() as client:
+        while True:
+            r = await client.get(
+                f"{ESI_BASE}/characters/{character_id}/contacts/",
+                headers={"Authorization": f"Bearer {access_token}"},
+                params={"page": page},
+            )
+            r.raise_for_status()
+            batch = r.json() or []
+            result.extend(batch)
+            if page >= int(r.headers.get("X-Pages", "1")):
+                break
+            page += 1
+    return result
+
+
 async def resolve_names(ids: list[int]) -> dict[int, str]:
     """Resolve character / corp / alliance IDs to names via ESI /universe/names/."""
     clean = [i for i in {*ids} if i]

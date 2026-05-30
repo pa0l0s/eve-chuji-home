@@ -30,6 +30,7 @@ SCOPES = " ".join([
     "esi-mail.read_mail.v1",
     "esi-mail.organize_mail.v1",
     "esi-mail.send_mail.v1",
+    "esi-characters.read_contacts.v1",
 ])
 
 

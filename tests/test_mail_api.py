@@ -152,3 +152,24 @@ async def test_resolve_recipients_route(client):
     r = await client.post("/api/me/mail/resolve", json={"names": ["Bob"]}, cookies=cookies)
     assert r.status_code == 200
     assert r.json()[0]["recipient_id"] == 5
+
+
+@respx.mock
+async def test_mail_contacts_resolved_and_filtered(client):
+    cookies = await _auth()
+    respx.get(f"{BASE}/contacts/").mock(return_value=Response(200, json=[
+        {"contact_id": 5, "contact_type": "character", "standing": 10.0},
+        {"contact_id": 8, "contact_type": "corporation", "standing": 0.0},
+        {"contact_id": 9, "contact_type": "faction", "standing": 0.0}],
+        headers={"X-Pages": "1"}))
+    respx.post("https://esi.evetech.net/latest/universe/names/").mock(
+        return_value=Response(200, json=[
+            {"id": 5, "name": "Bob", "category": "character"},
+            {"id": 8, "name": "CorpX", "category": "corporation"}]))
+    r = await client.get("/api/me/mail/contacts", cookies=cookies)
+    assert r.status_code == 200
+    data = r.json()
+    ids = [c["recipient_id"] for c in data]
+    assert 5 in ids and 8 in ids and 9 not in ids
+    assert data[0]["recipient_id"] == 5          # highest standing first
+    assert data[0]["name"] == "Bob"

@@ -3,7 +3,7 @@ from httpx import Response
 from esi import (
     get_mail_headers, get_mail, get_mail_labels, get_mailing_lists,
     set_mail, delete_mail, create_mail_label, delete_mail_label,
-    send_mail, resolve_recipient_ids,
+    send_mail, resolve_recipient_ids, get_contacts,
 )
 
 CID = 2122515161
@@ -113,3 +113,16 @@ async def test_resolve_recipient_ids():
     out = await resolve_recipient_ids(["Bob", "CorpX"])
     assert {"recipient_id": 5, "recipient_type": "character", "name": "Bob"} in out
     assert {"recipient_id": 8, "recipient_type": "corporation", "name": "CorpX"} in out
+
+
+@respx.mock
+async def test_get_contacts_walks_pages():
+    route = respx.get(f"{BASE}/contacts/").mock(side_effect=[
+        Response(200, json=[{"contact_id": 1, "contact_type": "character", "standing": 5.0}],
+                 headers={"X-Pages": "2"}),
+        Response(200, json=[{"contact_id": 2, "contact_type": "corporation", "standing": 0.0}],
+                 headers={"X-Pages": "2"}),
+    ])
+    out = await get_contacts(CID, "tok")
+    assert {c["contact_id"] for c in out} == {1, 2}
+    assert route.call_count == 2

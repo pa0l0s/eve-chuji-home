@@ -33,7 +33,7 @@ from esi import (
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
     get_mail_headers, get_mail, get_mail_labels, get_mailing_lists,
     set_mail, delete_mail, create_mail_label, delete_mail_label,
-    send_mail, resolve_recipient_ids,
+    send_mail, resolve_recipient_ids, get_contacts,
 )
 from db import cache_structure_name
 
@@ -1422,6 +1422,11 @@ _mail_body_cache: dict[tuple[int, int], dict] = {}
 _mail_unread_cache: dict[int, tuple[float, int]] = {}  # cid -> (cached_at, inbox_unread)
 _MAIL_UNREAD_TTL = 30.0
 
+# Cache for the contacts list used by compose To-field autocomplete.
+_mail_contacts_cache: dict[int, tuple[float, list]] = {}
+_MAIL_CONTACTS_TTL = 60.0
+_MAILABLE_CONTACT_TYPES = ("character", "corporation", "alliance")
+
 INBOX_LABEL_ID = 1
 
 
@@ -1503,6 +1508,30 @@ async def my_mail_unread(session: str | None = Cookie(None)):
     count = inbox.get("unread_count", 0)
     _mail_unread_cache[character_id] = (time.time(), count)
     return {"inbox_unread": count}
+
+
+@app.get("/api/me/mail/contacts")
+async def my_mail_contacts(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    hit = _mail_contacts_cache.get(character_id)
+    if hit and (time.time() - hit[0]) < _MAIL_CONTACTS_TTL:
+        return hit[1]
+    try:
+        access_token = await get_valid_token(character_id)
+        contacts = await get_contacts(character_id, access_token)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    mailable = [c for c in contacts if c.get("contact_type") in _MAILABLE_CONTACT_TYPES]
+    names = await resolve_names([c["contact_id"] for c in mailable])
+    out = [{"recipient_id": c["contact_id"],
+            "recipient_type": c["contact_type"],
+            "name": names.get(c["contact_id"]),
+            "standing": c.get("standing", 0.0)} for c in mailable]
+    out.sort(key=lambda c: (-(c["standing"] or 0.0), (c["name"] or "").lower()))
+    _mail_contacts_cache[character_id] = (time.time(), out)
+    return out
 
 
 @app.post("/api/me/mail/resolve")

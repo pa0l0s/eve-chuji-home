@@ -60,3 +60,8 @@ def test_scopes_include_mail():
     assert "esi-mail.read_mail.v1" in SCOPES
     assert "esi-mail.organize_mail.v1" in SCOPES
     assert "esi-mail.send_mail.v1" in SCOPES
+
+
+def test_scopes_include_read_contacts():
+    from auth import SCOPES
+    assert "esi-characters.read_contacts.v1" in SCOPES
