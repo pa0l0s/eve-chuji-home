@@ -801,7 +801,10 @@
     .mail-grid { display: grid; grid-template-columns: 220px minmax(280px, 1fr) minmax(300px, 1.4fr);
       gap: 1rem; max-width: 1400px; margin: 0 auto; height: calc(100vh - 160px); }
     .mail-folders, .mail-list, .mail-reader {
-      background: #1e2130; border: 1px solid #2d3348; border-radius: 12px;
+      background: rgba(15, 17, 23, 0.62);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid #2d3348; border-radius: 12px;
       padding: 1rem; overflow-y: auto; }
     .mail-compose-btn { width: 100%; margin-bottom: 1rem; }
     .mail-folder { display: flex; justify-content: space-between; align-items: center;
