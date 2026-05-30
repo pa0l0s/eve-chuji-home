@@ -835,6 +835,23 @@
     .mail-link-disabled { color: #64748b; text-decoration: underline dotted; cursor: default; }
     .mail-load-more { width: 100%; margin-top: 0.75rem; }
 
+    .compose-form label { display: block; }
+    .compose-form input, .compose-form textarea { width: 100%; background: #0f1117;
+      border: 1px solid #2d3348; border-radius: 8px; color: #e2e8f0; padding: 0.5rem;
+      font-family: inherit; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .compose-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
+    .compose-chip { background: #0c2233; color: #38bdf8; border-radius: 8px;
+      padding: 0.15rem 0.5rem; font-size: 0.78rem; }
+    .compose-chip button { background: none; border: none; color: #38bdf8; cursor: pointer; }
+    .compose-results { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem; }
+    .compose-contacts { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.5rem;
+      max-height: 140px; overflow-y: auto; }
+    .compose-contact { background: #1e2130; border: 1px solid #2d3348; color: #cbd5e1;
+      border-radius: 8px; padding: 0.2rem 0.5rem; font-size: 0.78rem; cursor: pointer; }
+    .compose-contact:hover { border-color: #38bdf8; color: #e2e8f0; }
+    .compose-contact .cc-type { color: #66768c; font-size: 0.68rem; margin-left: 0.3rem; }
+    .compose-actions { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
+
     /* ── Hidden ── */
     .hidden { display: none !important; }
   </style>
@@ -1327,11 +1344,167 @@
   // Temporary sanitizer — replaced by the DOM-based version in Task 9.
   function sanitizeEveMail(s){ const d=document.createElement('div'); d.textContent=s; return d; }
 
-  // Stubs — fully implemented in Task 8.
-  function openCompose() { alert('Compose — coming in Task 8'); }
-  function markMailRead() { /* Task 8 */ }
-  function deleteMail() { /* Task 8 */ }
-  function replyMail() { /* Task 8 */ }
+  async function markMailRead(mailId, read, refreshRow) {
+    try {
+      await fetch('/api/me/mail/' + mailId, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ read }) });
+    } catch {}
+    if (refreshRow) {
+      const h = mailState.headers.find(x => x.mail_id === mailId);
+      if (h) { h.is_read = read; renderMailList(mailState.headers.length >= 50); }
+    }
+    pollMailBadgeOnce();
+  }
+
+  async function deleteMail(mailId) {
+    if (!confirm('Delete this mail permanently?')) return;
+    try {
+      const r = await fetch('/api/me/mail/' + mailId, { method: 'DELETE' });
+      if (!r.ok) { showError('mail-error', mailErr(r.status)); return; }
+    } catch { showError('mail-error', 'Network error.'); return; }
+    mailState.headers = mailState.headers.filter(x => x.mail_id !== mailId);
+    mailState.selectedId = null;
+    renderMailList(mailState.headers.length >= 50);
+    document.getElementById('mail-reader').innerHTML =
+      '<div class="mail-reader-empty">Select a mail to read.</div>';
+    pollMailBadgeOnce();
+  }
+
+  async function pollMailBadgeOnce() {
+    try {
+      const r = await fetch('/api/me/mail/unread');
+      if (r.ok) updateMailBadge((await r.json()).inbox_unread);
+    } catch {}
+  }
+
+  let composeRecipients = [];  // [{recipient_id, recipient_type, name}]
+
+  function openCompose(prefill) {
+    composeRecipients = (prefill && prefill.recipients) || [];
+    showModal('Compose Mail', composeModalHtml(prefill || {}));
+    renderComposeRecipients();
+    loadComposeContacts();
+  }
+
+  function composeModalHtml(p) {
+    return `
+      <div class="compose-form">
+        <label class="mail-section-label">Recipients</label>
+        <div id="compose-chips" class="compose-chips"></div>
+        <input id="compose-recipient-input" placeholder="Type a name, Enter to search"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();composeSearchRecipient();}">
+        <div id="compose-search-results" class="compose-results"></div>
+        <label class="mail-section-label">From your contacts</label>
+        <input id="compose-contacts-filter" placeholder="Filter contacts…"
+               oninput="renderComposeContacts()">
+        <div id="compose-contacts" class="compose-contacts">Loading contacts…</div>
+        <label class="mail-section-label">Subject</label>
+        <input id="compose-subject" value="${escAttr(p.subject || '')}">
+        <label class="mail-section-label">Message</label>
+        <textarea id="compose-body" rows="8">${escHtml(p.body || '')}</textarea>
+        <div id="compose-error" class="banner"></div>
+        <div class="compose-actions">
+          <button class="btn-action" onclick="sendCompose()">Send</button>
+        </div>
+      </div>`;
+  }
+
+  function renderComposeRecipients() {
+    const el = document.getElementById('compose-chips');
+    if (!el) return;
+    el.innerHTML = composeRecipients.map((r, i) =>
+      `<span class="compose-chip">${escHtml(r.name || ('#' + r.recipient_id))}
+         <button onclick="removeRecipient(${i})" aria-label="remove">×</button></span>`).join('');
+  }
+
+  function removeRecipient(i) { composeRecipients.splice(i, 1); renderComposeRecipients(); }
+
+  async function composeSearchRecipient() {
+    const input = document.getElementById('compose-recipient-input');
+    const name = input.value.trim();
+    if (!name) return;
+    const box = document.getElementById('compose-search-results');
+    box.textContent = 'Searching…';
+    try {
+      const r = await fetch('/api/me/mail/resolve', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ names: [name] }) });
+      const matches = r.ok ? await r.json() : [];
+      if (!matches.length) { box.textContent = 'No match.'; return; }
+      box.innerHTML = matches.map(m =>
+        `<button class="btn-action" onclick='addRecipient(${escAttr(JSON.stringify(m))})'>
+           ${escHtml(m.name)} (${escHtml(m.recipient_type)})</button>`).join(' ');
+    } catch { box.textContent = 'Search failed.'; }
+  }
+
+  function addRecipient(m) {
+    if (!composeRecipients.some(r => r.recipient_id === m.recipient_id))
+      composeRecipients.push(m);
+    renderComposeRecipients();
+    const inp = document.getElementById('compose-recipient-input');
+    if (inp) inp.value = '';
+    const sr = document.getElementById('compose-search-results');
+    if (sr) sr.innerHTML = '';
+  }
+
+  let composeContacts = [];
+  async function loadComposeContacts() {
+    composeContacts = [];
+    try {
+      const r = await fetch('/api/me/mail/contacts');
+      composeContacts = r.ok ? await r.json() : [];
+    } catch { composeContacts = []; }
+    renderComposeContacts();
+  }
+
+  function renderComposeContacts() {
+    const box = document.getElementById('compose-contacts');
+    if (!box) return;
+    if (!composeContacts.length) { box.textContent = 'No contacts available.'; return; }
+    const filterEl = document.getElementById('compose-contacts-filter');
+    const q = (filterEl ? filterEl.value : '').trim().toLowerCase();
+    const list = composeContacts
+      .filter(c => !q || (c.name || '').toLowerCase().includes(q))
+      .slice(0, 50);
+    if (!list.length) { box.textContent = 'No matching contacts.'; return; }
+    box.innerHTML = list.map(c =>
+      `<button class="compose-contact" onclick='addRecipient(${escAttr(JSON.stringify(
+         { recipient_id: c.recipient_id, recipient_type: c.recipient_type, name: c.name }))})'>
+         ${escHtml(c.name || ('#' + c.recipient_id))}
+         <span class="cc-type">${escHtml(c.recipient_type)}</span></button>`).join('');
+  }
+
+  async function sendCompose() {
+    const subject = document.getElementById('compose-subject').value.trim();
+    const body = document.getElementById('compose-body').value;
+    const errEl = document.getElementById('compose-error');
+    if (!composeRecipients.length || !subject) {
+      errEl.textContent = 'Add at least one recipient and a subject.';
+      errEl.classList.add('show'); return;
+    }
+    const payload = { recipients: composeRecipients.map(
+      ({ recipient_id, recipient_type }) => ({ recipient_id, recipient_type })),
+      subject, body };
+    try {
+      const r = await fetch('/api/me/mail', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        errEl.textContent = d.detail || 'Send failed.'; errEl.classList.add('show'); return;
+      }
+      closeModal();
+    } catch { errEl.textContent = 'Network error.'; errEl.classList.add('show'); }
+  }
+
+  function replyMail(mailId) {
+    const m = mailState.lastOpened;
+    if (!m) return;
+    const subj = m.subject && m.subject.startsWith('Re:') ? m.subject : 'Re: ' + (m.subject || '');
+    openCompose({ recipients: [{ recipient_id: m.from,
+      recipient_type: 'character', name: m.from_name }], subject: subj, body: '' });
+  }
 
   // ── Contracts ─────────────────────────────────────────────────────────────
 
