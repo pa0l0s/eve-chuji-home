@@ -594,6 +594,57 @@ async def get_jita_buy_max(type_id: int) -> float | None:
             return None
 
 
+# ── Mail (read) ──────────────────────────────────────────────────────────────
+
+async def get_mail_headers(character_id: int, access_token: str,
+                           labels: list[int] | None = None,
+                           last_mail_id: int | None = None) -> list[dict]:
+    """Up to 50 mail headers, newest first. `last_mail_id` pages older."""
+    params: dict = {}
+    if labels:
+        params["labels"] = ",".join(str(l) for l in labels)
+    if last_mail_id:
+        params["last_mail_id"] = last_mail_id
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/",
+            headers={"Authorization": f"Bearer {access_token}"},
+            params=params,
+        )
+        r.raise_for_status()
+        return r.json() or []
+
+
+async def get_mail(character_id: int, access_token: str, mail_id: int) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/{mail_id}/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_mail_labels(character_id: int, access_token: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/labels/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json()
+
+
+async def get_mailing_lists(character_id: int, access_token: str) -> list[dict]:
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{ESI_BASE}/characters/{character_id}/mail/lists/",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        r.raise_for_status()
+        return r.json() or []
+
+
 async def get_jita_sell_min(type_id: int) -> float | None:
     """Lowest sell order price in Jita 4-4 for the given type, or None."""
     async with httpx.AsyncClient() as client:
