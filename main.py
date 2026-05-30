@@ -31,6 +31,9 @@ from esi import (
     open_contract_in_client,
     resolve_names, resolve_type_ids, get_jita_buy_max,
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
+    get_mail_headers, get_mail, get_mail_labels, get_mailing_lists,
+    set_mail, delete_mail, create_mail_label, delete_mail_label,
+    send_mail, resolve_recipient_ids,
 )
 from db import cache_structure_name
 
@@ -1408,6 +1411,116 @@ async def my_contracts(session: str | None = Cookie(None)):
     result = {"character_id": character_id, "contracts": contracts}
     _contracts_cache[character_id] = (time.time(), result)
     return result
+
+
+# ── Mail ─────────────────────────────────────────────────────────────────────
+
+# Mail bodies are immutable; cache per (character_id, mail_id) for the process.
+_mail_body_cache: dict[tuple[int, int], dict] = {}
+
+# Short cache for the Inbox-unread badge poll so 60s polling never hammers ESI.
+_mail_unread_cache: dict[int, tuple[float, int]] = {}  # cid -> (cached_at, inbox_unread)
+_MAIL_UNREAD_TTL = 30.0
+
+INBOX_LABEL_ID = 1
+
+
+def _mail_scope_http(e: httpx.HTTPStatusError) -> HTTPException:
+    print(f"ESI mail HTTP {e.response.status_code}: {e.response.text}")
+    if e.response.status_code == 403:
+        return HTTPException(
+            status_code=403,
+            detail="Mail scope not granted — log out and back in to enable Mail.")
+    return HTTPException(status_code=502, detail="ESI unavailable")
+
+
+async def _enrich_mail_names(mails: list[dict]) -> None:
+    """Attach `from_name` and recipient `name` to a list of mail dicts in place."""
+    ids: list[int] = []
+    for m in mails:
+        if m.get("from"):
+            ids.append(m["from"])
+        for rcpt in m.get("recipients", []):
+            if rcpt.get("recipient_id"):
+                ids.append(rcpt["recipient_id"])
+    names = await resolve_names(ids)
+    for m in mails:
+        m["from_name"] = names.get(m.get("from"))
+        for rcpt in m.get("recipients", []):
+            rcpt["name"] = names.get(rcpt.get("recipient_id"))
+
+
+@app.get("/api/me/mail")
+async def my_mail(labels: str | None = None, last_mail_id: int | None = None,
+                  session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    label_ids = [int(x) for x in labels.split(",")] if labels else None
+    try:
+        access_token = await get_valid_token(character_id)
+        headers = await get_mail_headers(character_id, access_token,
+                                         labels=label_ids, last_mail_id=last_mail_id)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    await _enrich_mail_names(headers)
+    return headers
+
+
+@app.get("/api/me/mail/labels")
+async def my_mail_labels(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        access_token = await get_valid_token(character_id)
+        labels, lists = await asyncio.gather(
+            get_mail_labels(character_id, access_token),
+            get_mailing_lists(character_id, access_token),
+        )
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"labels": labels.get("labels", []),
+            "total_unread_count": labels.get("total_unread_count", 0),
+            "lists": lists}
+
+
+@app.get("/api/me/mail/unread")
+async def my_mail_unread(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    hit = _mail_unread_cache.get(character_id)
+    if hit and (time.time() - hit[0]) < _MAIL_UNREAD_TTL:
+        return {"inbox_unread": hit[1]}
+    try:
+        access_token = await get_valid_token(character_id)
+        labels = await get_mail_labels(character_id, access_token)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    inbox = next((l for l in labels.get("labels", [])
+                  if l.get("label_id") == INBOX_LABEL_ID), {})
+    count = inbox.get("unread_count", 0)
+    _mail_unread_cache[character_id] = (time.time(), count)
+    return {"inbox_unread": count}
+
+
+@app.get("/api/me/mail/{mail_id}")
+async def my_mail_detail(mail_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    cached = _mail_body_cache.get((character_id, mail_id))
+    if cached:
+        return cached
+    try:
+        access_token = await get_valid_token(character_id)
+        mail = await get_mail(character_id, access_token, mail_id)
+    except httpx.HTTPStatusError as e:
+        raise _mail_scope_http(e)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    await _enrich_mail_names([mail])
+    _mail_body_cache[(character_id, mail_id)] = mail
+    return mail
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────
