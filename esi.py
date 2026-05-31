@@ -838,3 +838,22 @@ async def get_starbase_detail(corporation_id: int, starbase_id: int,
         )
         r.raise_for_status()
         return r.json()
+
+
+def parse_fitting_link(href: str) -> tuple[int, list[tuple[int, int]]]:
+    """Parse an EVE 'fitting:<shipID>:<typeID>;<qty>:...::' link.
+    Returns (ship_type_id, [(type_id, qty), ...]); (0, []) if not a fitting link."""
+    if not href.startswith("fitting:"):
+        return (0, [])
+    parts = href[len("fitting:"):].split(":")
+    if not parts or not parts[0].isdigit():
+        return (0, [])
+    ship_id = int(parts[0])
+    items: list[tuple[int, int]] = []
+    for field in parts[1:]:
+        if not field:
+            continue
+        tid, _, qty = field.partition(";")
+        if tid.isdigit():
+            items.append((int(tid), int(qty) if qty.isdigit() else 1))
+    return (ship_id, items)
