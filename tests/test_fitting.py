@@ -83,6 +83,14 @@ async def test_meta_charge_and_cache():
     assert route.call_count == 1
 
 
+@respx.mock
+async def test_meta_degrades_to_charge_on_esi_error():
+    _fitting_meta_cache.clear()
+    respx.get(f"{T}/999/").mock(return_value=Response(500))
+    m = await get_fitting_type_meta(999)
+    assert m == {"name": "Type #999", "slot": None, "kind": "charge"}
+
+
 def test_build_eft_groups_and_formats():
     items = [
         {"name": "Damage Control II", "slot": "low", "kind": "module", "qty": 1},
