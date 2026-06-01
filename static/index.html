@@ -654,6 +654,31 @@
       letter-spacing: 0.06em;
       margin-right: 0.3rem;
     }
+    .proj-reward-total {
+      max-width: 1400px;
+      margin: 0 auto 1rem auto;
+      padding: 0.6rem 0.9rem;
+      background: rgba(15, 17, 23, 0.62);
+      border: 1px solid #2d3348;
+      border-radius: 12px;
+      display: flex;
+      align-items: baseline;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+    }
+    .proj-reward-total .prt-label {
+      color: #66768c;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .proj-reward-total .prt-val {
+      color: #38bdf8;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+    }
+    .proj-reward-total .prt-sep { color: #475569; }
+    .proj-reward-total .prt-unit { color: #66768c; font-size: 0.78rem; }
     .proj-sort-btn {
       background: none;
       border: 1px solid #2d3348;
@@ -2455,8 +2480,19 @@
            Market price comparison unavailable: ${escHtml(market_error)}
          </div>`
       : '';
+    const sumRemaining = active.reduce((s, p) => s + (p.reward?.remaining || 0), 0);
+    const sumInitial   = active.reduce((s, p) => s + (p.reward?.initial   || 0), 0);
+    const rewardTotal = active.length
+      ? `<div class="proj-reward-total">
+           <span class="prt-label">Total reward pool</span>
+           <span class="prt-val">${fmtISK(sumRemaining)}</span>
+           <span class="prt-sep">/</span>
+           <span class="prt-val">${fmtISK(sumInitial)}</span>
+           <span class="prt-unit">ISK</span>
+         </div>`
+      : '';
     document.getElementById('pane-active').innerHTML =
-      marketNotice + projectListHtml(sortProjects(active), 'No active projects.');
+      marketNotice + rewardTotal + projectListHtml(sortProjects(active), 'No active projects.');
     document.getElementById('pane-closed').innerHTML =
       projectListHtml(sortProjects(closed), 'No closed projects.');
   }
