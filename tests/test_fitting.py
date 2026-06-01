@@ -1,6 +1,9 @@
+import time
 import respx
 from httpx import Response
 from esi import parse_fitting_link, get_fitting_type_meta, _fitting_meta_cache, build_eft
+from db import upsert_token
+from auth import make_session_cookie
 
 
 def test_parse_fitting_basic():
@@ -105,4 +108,53 @@ def test_build_eft_groups_and_formats():
         "Hobgoblin II x2\n"
         "\n"
         "Scourge Heavy Missile x1000"
+    )
+
+
+TYPES = "https://esi.evetech.net/latest/universe/types"
+GROUPS = "https://esi.evetech.net/latest/universe/groups"
+
+
+async def _fit_auth(character_id=777):
+    await upsert_token(character_id=character_id, character_name="Pilot",
+                       access_token="a", refresh_token="r",
+                       expires_at=time.time() + 1200, corporation_id=98340844)
+    return {"session": make_session_cookie(character_id)}
+
+
+async def test_fitting_eft_requires_auth(client):
+    r = await client.post("/api/me/fitting/eft", json={"fitting": "fitting:621:100;1::", "name": "x"})
+    assert r.status_code == 401
+
+
+async def test_fitting_eft_rejects_non_fitting(client):
+    cookies = await _fit_auth()
+    r = await client.post("/api/me/fitting/eft",
+                          json={"fitting": "showinfo:1377//1", "name": "x"}, cookies=cookies)
+    assert r.status_code == 400
+
+
+@respx.mock
+async def test_fitting_eft_happy_path(client):
+    _fitting_meta_cache.clear()
+    cookies = await _fit_auth()
+    respx.get(f"{TYPES}/621/").mock(return_value=Response(200, json={
+        "name": "Caracal", "group_id": 26}))
+    respx.get(f"{TYPES}/100/").mock(return_value=Response(200, json={
+        "name": "Damage Control II", "group_id": 60,
+        "dogma_effects": [{"effect_id": 11}]}))
+    respx.get(f"{TYPES}/200/").mock(return_value=Response(200, json={
+        "name": "Hobgoblin II", "group_id": 100, "dogma_effects": []}))
+    respx.get(f"{GROUPS}/100/").mock(return_value=Response(200, json={
+        "group_id": 100, "name": "Light Scout Drone", "category_id": 18}))
+    r = await client.post("/api/me/fitting/eft", cookies=cookies,
+                          json={"fitting": "fitting:621:100;1:200;2::", "name": "ess"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["ship"] == "Caracal"
+    assert data["eft"] == (
+        "[Caracal, ess]\n"
+        "Damage Control II\n"
+        "\n"
+        "Hobgoblin II x2"
     )
