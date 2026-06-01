@@ -836,6 +836,11 @@
       white-space: pre-wrap; word-break: break-word; }
     .mail-reader-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
     .mail-link-disabled { color: #64748b; text-decoration: underline dotted; cursor: default; }
+    .mail-fitting-link { text-decoration: underline; cursor: pointer; }
+    .fit-eft { background: #0f1117; border: 1px solid #2d3348; border-radius: 8px;
+      padding: 0.75rem; margin: 0; color: #cbd5e1; font-family: ui-monospace, SFMono-Regular,
+      Menlo, monospace; font-size: 0.8rem; line-height: 1.45; white-space: pre;
+      overflow-x: auto; max-height: 60vh; overflow-y: auto; }
     .mail-load-more { width: 100%; margin-top: 0.75rem; }
 
     .compose-form label { display: block; }
@@ -1345,6 +1350,53 @@
     mailState.lastOpened = m;
   }
 
+  async function openFittingModal(fittingStr, fitName) {
+    showModal('Fitting', '<div style="color:#66768c;text-align:center;padding:1.5rem">Loading fit…</div>');
+    try {
+      const r = await fetch('/api/me/fitting/eft', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fitting: fittingStr, name: fitName }) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        setModalBody('<div class="banner show">' + escHtml(d.detail || 'Could not load fitting.') + '</div>');
+        return;
+      }
+      const data = await r.json();
+      renderFittingModal(data.eft);
+    } catch {
+      setModalBody('<div class="banner show">Network error loading fitting.</div>');
+    }
+  }
+
+  function renderFittingModal(eft) {
+    const body = document.getElementById('modal-body');
+    body.innerHTML = '';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:0.5rem';
+    const btn = document.createElement('button');
+    btn.className = 'btn-action'; btn.textContent = 'Copy';
+    btn.onclick = () => copyFitEft(eft, btn);
+    bar.appendChild(btn);
+    const pre = document.createElement('pre');
+    pre.className = 'fit-eft';
+    pre.textContent = eft;             // textContent → XSS-safe
+    body.appendChild(bar);
+    body.appendChild(pre);
+  }
+
+  async function copyFitEft(text, btn) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta);
+    }
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+  }
+
   // Render EVE mail body safely: allow text, <br>, basic styling, http links;
   // neutralize client-only links (showinfo:/killReport:) to non-clickable text.
   function sanitizeEveMail(raw) {
@@ -1387,6 +1439,12 @@
             a.href = 'https://zkillboard.com/kill/' + kill[1] + '/';
             a.target = '_blank'; a.rel = 'noopener noreferrer';
             a.style.color = '#38bdf8';
+            walk(node, a); dst.appendChild(a);
+          } else if (/^fitting:/i.test(href)) {
+            const a = document.createElement('a');
+            a.href = '#'; a.className = 'mail-fitting-link'; a.style.color = '#38bdf8';
+            const fitName = node.textContent || 'Fitting';
+            a.onclick = (e) => { e.preventDefault(); openFittingModal(href, fitName); };
             walk(node, a); dst.appendChild(a);
           } else {
             // showinfo:/etc — client-only, render as plain styled text
