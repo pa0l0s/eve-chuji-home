@@ -895,3 +895,33 @@ async def get_fitting_type_meta(type_id: int) -> dict:
         meta = {"name": name, "slot": None, "kind": kind}
     _fitting_meta_cache[type_id] = meta
     return meta
+
+
+def build_eft(ship_name: str, fit_name: str, items: list[dict]) -> str:
+    """Render items ([{name, slot, kind, qty}]) as EFT/Pyfa-importable text.
+    Fitted modules expand to one line per unit; drones/cargo use 'Name xqty'.
+    Non-empty slot sections (low, mid, high, rig, subsystem) then drones then cargo,
+    each separated by a blank line."""
+    order = ["low", "mid", "high", "rig", "subsystem"]
+    slots: dict[str, list[str]] = {k: [] for k in order}
+    drones: list[str] = []
+    cargo: list[str] = []
+    for it in items:
+        qty = it.get("qty", 1)
+        kind = it.get("kind")
+        if kind == "module" and it.get("slot") in slots:
+            slots[it["slot"]] += [it["name"]] * qty
+        elif kind == "drone":
+            drones.append(f"{it['name']} x{qty}")
+        else:
+            cargo.append(f"{it['name']} x{qty}")
+    sections = [
+        "\n".join(slots[k]) for k in order if slots[k]
+    ]
+    if drones:
+        sections.append("\n".join(drones))
+    if cargo:
+        sections.append("\n".join(cargo))
+    body = "\n\n".join(sections)
+    header = f"[{ship_name}, {fit_name}]"
+    return f"{header}\n{body}" if body else header

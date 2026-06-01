@@ -1,6 +1,6 @@
 import respx
 from httpx import Response
-from esi import parse_fitting_link, get_fitting_type_meta, _fitting_meta_cache
+from esi import parse_fitting_link, get_fitting_type_meta, _fitting_meta_cache, build_eft
 
 
 def test_parse_fitting_basic():
@@ -78,3 +78,31 @@ async def test_meta_charge_and_cache():
     assert m1 == {"name": "Scourge Heavy Missile", "slot": None, "kind": "charge"}
     assert m2 == m1
     assert route.call_count == 1
+
+
+def test_build_eft_groups_and_formats():
+    items = [
+        {"name": "Damage Control II", "slot": "low", "kind": "module", "qty": 1},
+        {"name": "Large Shield Extender II", "slot": "mid", "kind": "module", "qty": 1},
+        {"name": "Heavy Missile Launcher II", "slot": "high", "kind": "module", "qty": 3},
+        {"name": "Medium Core Defense Field Extender I", "slot": "rig", "kind": "module", "qty": 1},
+        {"name": "Hobgoblin II", "slot": None, "kind": "drone", "qty": 2},
+        {"name": "Scourge Heavy Missile", "slot": None, "kind": "charge", "qty": 1000},
+    ]
+    eft = build_eft("Caracal", "test", items)
+    assert eft == (
+        "[Caracal, test]\n"
+        "Damage Control II\n"
+        "\n"
+        "Large Shield Extender II\n"
+        "\n"
+        "Heavy Missile Launcher II\n"
+        "Heavy Missile Launcher II\n"
+        "Heavy Missile Launcher II\n"
+        "\n"
+        "Medium Core Defense Field Extender I\n"
+        "\n"
+        "Hobgoblin II x2\n"
+        "\n"
+        "Scourge Heavy Missile x1000"
+    )
