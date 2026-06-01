@@ -34,6 +34,7 @@ from esi import (
     get_mail_headers, get_mail, get_mail_labels, get_mailing_lists,
     set_mail, delete_mail, create_mail_label, delete_mail_label,
     send_mail, resolve_recipient_ids, get_contacts,
+    parse_fitting_link, get_fitting_type_meta, build_eft,
 )
 from db import cache_structure_name
 
@@ -1643,6 +1644,28 @@ async def my_mail_detail(mail_id: int, session: str | None = Cookie(None)):
     await _enrich_mail_names([mail])
     _mail_body_cache[(character_id, mail_id)] = mail
     return mail
+
+
+# ── Fitting ──────────────────────────────────────────────────────────────────
+
+@app.post("/api/me/fitting/eft")
+async def my_fitting_eft(body: dict, session: str | None = Cookie(None)):
+    await get_current_character_id(session)
+    fitting = body.get("fitting") or ""
+    fit_name = (body.get("name") or "").strip() or "Fitting"
+    ship_id, pairs = parse_fitting_link(fitting)
+    if not ship_id:
+        raise HTTPException(status_code=400, detail="Not a fitting link")
+    try:
+        ship_info, *metas = await asyncio.gather(
+            get_type_info(ship_id),
+            *[get_fitting_type_meta(tid) for tid, _ in pairs],
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="Could not load fitting (ESI unavailable)")
+    items = [{**m, "qty": qty} for m, (tid, qty) in zip(metas, pairs)]
+    ship_name = ship_info.get("name", f"Type #{ship_id}")
+    return {"eft": build_eft(ship_name, fit_name, items), "ship": ship_name}
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────

@@ -838,3 +838,90 @@ async def get_starbase_detail(corporation_id: int, starbase_id: int,
         )
         r.raise_for_status()
         return r.json()
+
+
+def parse_fitting_link(href: str) -> tuple[int, list[tuple[int, int]]]:
+    """Parse an EVE 'fitting:<shipID>:<typeID>;<qty>:...::' link.
+    Returns (ship_type_id, [(type_id, qty), ...]); (0, []) if not a fitting link."""
+    if not href.startswith("fitting:"):
+        return (0, [])
+    parts = href[len("fitting:"):].split(":")
+    if not parts or not parts[0].isdigit():
+        return (0, [])
+    ship_id = int(parts[0])
+    items: list[tuple[int, int]] = []
+    for field in parts[1:]:
+        if not field:
+            continue
+        tid, _, qty = field.partition(";")
+        if tid.isdigit():
+            items.append((int(tid), int(qty) if qty.isdigit() else 1))
+    return (ship_id, items)
+
+
+# Module slot dogma effects → EFT slot name.
+SLOT_EFFECTS = {11: "low", 13: "mid", 12: "high", 2663: "rig", 3772: "subsystem"}
+DRONE_CATEGORY_ID = 18
+
+# Static per-type metadata; cached in-memory for the process.
+_fitting_meta_cache: dict[int, dict] = {}
+
+
+async def get_fitting_type_meta(type_id: int) -> dict:
+    """Returns {name, slot, kind} for a fitting item.
+    slot ∈ low/mid/high/rig/subsystem/None; kind ∈ module/drone/charge."""
+    if type_id in _fitting_meta_cache:
+        return _fitting_meta_cache[type_id]
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/universe/types/{type_id}/")
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPError:
+            return {"name": f"Type #{type_id}", "slot": None, "kind": "charge"}
+    name = data.get("name", f"Type #{type_id}")
+    slot = None
+    for eff in data.get("dogma_effects", []):
+        s = SLOT_EFFECTS.get(eff.get("effect_id"))
+        if s:
+            slot = s
+            break
+    if slot:
+        meta = {"name": name, "slot": slot, "kind": "module"}
+    else:
+        group_id = data.get("group_id")
+        group = await get_group_info(group_id) if group_id else None
+        kind = "drone" if group and group.get("category_id") == DRONE_CATEGORY_ID else "charge"
+        meta = {"name": name, "slot": None, "kind": kind}
+    _fitting_meta_cache[type_id] = meta
+    return meta
+
+
+def build_eft(ship_name: str, fit_name: str, items: list[dict]) -> str:
+    """Render items ([{name, slot, kind, qty}]) as EFT/Pyfa-importable text.
+    Fitted modules expand to one line per unit; drones/cargo use 'Name xqty'.
+    Non-empty slot sections (low, mid, high, rig, subsystem) then drones then cargo,
+    each separated by a blank line."""
+    order = ["low", "mid", "high", "rig", "subsystem"]
+    slots: dict[str, list[str]] = {k: [] for k in order}
+    drones: list[str] = []
+    cargo: list[str] = []
+    for it in items:
+        qty = it.get("qty", 1)
+        kind = it.get("kind")
+        if kind == "module" and it.get("slot") in slots:
+            slots[it["slot"]] += [it["name"]] * qty
+        elif kind == "drone":
+            drones.append(f"{it['name']} x{qty}")
+        else:
+            cargo.append(f"{it['name']} x{qty}")
+    sections = [
+        "\n".join(slots[k]) for k in order if slots[k]
+    ]
+    if drones:
+        sections.append("\n".join(drones))
+    if cargo:
+        sections.append("\n".join(cargo))
+    body = "\n\n".join(sections)
+    header = f"[{ship_name}, {fit_name}]"
+    return f"{header}\n{body}" if body else header
