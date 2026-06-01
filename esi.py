@@ -857,3 +857,41 @@ def parse_fitting_link(href: str) -> tuple[int, list[tuple[int, int]]]:
         if tid.isdigit():
             items.append((int(tid), int(qty) if qty.isdigit() else 1))
     return (ship_id, items)
+
+
+# Module slot dogma effects → EFT slot name.
+SLOT_EFFECTS = {11: "low", 13: "mid", 12: "high", 2663: "rig", 3772: "subsystem"}
+DRONE_CATEGORY_ID = 18
+
+# Static per-type metadata; cached in-memory for the process.
+_fitting_meta_cache: dict[int, dict] = {}
+
+
+async def get_fitting_type_meta(type_id: int) -> dict:
+    """Returns {name, slot, kind} for a fitting item.
+    slot ∈ low/mid/high/rig/subsystem/None; kind ∈ module/drone/charge."""
+    if type_id in _fitting_meta_cache:
+        return _fitting_meta_cache[type_id]
+    async with httpx.AsyncClient() as client:
+        try:
+            r = await client.get(f"{ESI_BASE}/universe/types/{type_id}/")
+            r.raise_for_status()
+            data = r.json()
+        except httpx.HTTPError:
+            return {"name": f"Type #{type_id}", "slot": None, "kind": "charge"}
+    name = data.get("name", f"Type #{type_id}")
+    slot = None
+    for eff in data.get("dogma_effects", []):
+        s = SLOT_EFFECTS.get(eff.get("effect_id"))
+        if s:
+            slot = s
+            break
+    if slot:
+        meta = {"name": name, "slot": slot, "kind": "module"}
+    else:
+        group_id = data.get("group_id")
+        group = await get_group_info(group_id) if group_id else None
+        kind = "drone" if group and group.get("category_id") == DRONE_CATEGORY_ID else "charge"
+        meta = {"name": name, "slot": None, "kind": kind}
+    _fitting_meta_cache[type_id] = meta
+    return meta
