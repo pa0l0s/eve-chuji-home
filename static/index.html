@@ -2061,7 +2061,7 @@
 
   // Shared renderer: an item/type name followed by in-game info + market icons.
   // Degrades to just the escaped name when no type id is available.
-  function itemName(typeId, name, opts = {}) {
+  function itemName(typeId, name) {
     const safe = escHtml(name == null ? '' : String(name));
     if (!typeId) return safe;
     const t = Number(typeId);
@@ -2290,7 +2290,7 @@
             ${list.map(s => `
               <tr>
                 <td style="color:#e2e8f0">${escHtml(s.name || ('Citadel #' + (s.structure_id || '')))}</td>
-                <td><span class="badge badge-blue">${itemName(s.type_id, s.type_name || '–')}</span></td>
+                <td style="color:#e2e8f0">${itemName(s.type_id, s.type_name || '–')}</td>
                 <td>${systemCell(s)}</td>
                 <td>${citadelStateBadge(s.state)}</td>
                 <td>${fuelExpires(s.fuel_expires)}</td>
