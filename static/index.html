@@ -862,6 +862,18 @@
     .mail-reader-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
     .mail-link-disabled { color: #64748b; text-decoration: underline dotted; cursor: default; }
     .mail-fitting-link { text-decoration: underline; cursor: pointer; }
+    .eve-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .eve-item-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 16px; height: 16px; padding: 0; border: 0; background: none;
+      cursor: pointer; opacity: 0.55; transition: opacity 0.15s, filter 0.15s;
+      vertical-align: middle; flex: 0 0 auto;
+    }
+    .eve-item-icon img { width: 14px; height: 14px; display: block; }
+    .eve-item-icon:hover { opacity: 1; }
+    .eve-item-icon.btn-ok  { opacity: 1; filter: hue-rotate(80deg) saturate(2); }
+    .eve-item-icon.btn-fail { opacity: 1; filter: hue-rotate(-50deg) saturate(3); }
+    .eve-item-icon:disabled { cursor: default; }
     .fit-eft { background: #0f1117; border: 1px solid #2d3348; border-radius: 8px;
       padding: 0.75rem; margin: 0; color: #cbd5e1; font-family: ui-monospace, SFMono-Regular,
       Menlo, monospace; font-size: 0.8rem; line-height: 1.45; white-space: pre;
@@ -1809,7 +1821,7 @@
                   onclick="openContractDetail(${c.contract_id})">
                 <td>${contractIcon(c, false)}</td>
                 <td style="color:#e2e8f0">
-                  ${escHtml(c.title || 'Contract #' + c.contract_id)}
+                  ${itemName(c.icon_type_id, c.title || 'Contract #' + c.contract_id)}
                   ${issuerLine(c)}
                 </td>
                 <td><span class="badge badge-muted">${typeLabel(c.type)}</span></td>
@@ -1993,10 +2005,15 @@
     const price = c && c.price
       ? `<span style="color:#38bdf8">${fmtISK(c.price)} ISK</span>`
       : '<span style="color:#66768c">–</span>';
+    const heroItem = (d.items || []).find(i => i.type_id === hero.type_id);
+    const heroName = hero.type_id
+      ? `<div style="grid-column:1 / -1;color:#e2e8f0;font-weight:600">${itemName(hero.type_id, heroItem ? heroItem.name : ('Type #' + hero.type_id))}</div>`
+      : '';
     const meta = c ? `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1rem;
                   font-size:0.8rem;margin-bottom:1rem;padding-bottom:0.75rem;
                   border-bottom:1px solid #2d3348">
+        ${heroName}
         <div><span style="color:#808fa6">Type</span><br>
           <span class="badge badge-muted">${typeLabel(c.type)}</span></div>
         <div><span style="color:#808fa6">Contract Price</span><br>${price}</div>
@@ -2012,7 +2029,7 @@
       : fmtISK(v) + ' ISK';
     const rows = (d.items || []).map(i => `
       <tr>
-        <td style="color:#e2e8f0">${escHtml(i.name)}</td>
+        <td style="color:#e2e8f0">${itemName(i.type_id, i.name)}</td>
         <td style="text-align:right;font-variant-numeric:tabular-nums">${fmtNum(i.quantity)}</td>
         <td style="text-align:right">${cell(i.buy)}</td>
         <td style="text-align:right">${cell(i.sell)}</td>
@@ -2040,6 +2057,55 @@
       : '<p style="color:#66768c;text-align:center;padding:1rem">No items in this contract.</p>';
 
     return heroImg + meta + table;
+  }
+
+  // Shared renderer: an item/type name followed by in-game info + market icons.
+  // Degrades to just the escaped name when no type id is available.
+  function itemName(typeId, name) {
+    const safe = escHtml(name == null ? '' : String(name));
+    if (!typeId) return safe;
+    const t = Number(typeId);
+    const info = `<button class="eve-item-icon" title="Show info in EVE"
+        aria-label="Show info in EVE"
+        onclick="event.stopPropagation(); openItemInfo(this, ${t})">
+        <img src="/info-icon.png" alt=""></button>`;
+    const market = `<button class="eve-item-icon" title="View market in EVE"
+        aria-label="View market in EVE"
+        onclick="event.stopPropagation(); openItemMarket(this, ${t})">
+        <img src="/market-icon.png" alt=""></button>`;
+    return `<span class="eve-item"><span class="eve-item-name">${safe}</span>${info}${market}</span>`;
+  }
+
+  async function _openItemWindow(btn, url, okTitle) {
+    btn.disabled = true;
+    btn.classList.remove('btn-ok', 'btn-fail');
+    try {
+      const r = await fetch(url, { method: 'POST' });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({}));
+        btn.classList.add('btn-fail');
+        btn.title = detail.detail || `Failed (${r.status})`;
+      } else {
+        btn.classList.add('btn-ok');
+        btn.title = okTitle;
+      }
+    } catch {
+      btn.classList.add('btn-fail');
+      btn.title = 'Network error';
+    }
+    const baseTitle = btn.getAttribute('aria-label') || 'Open in EVE';
+    setTimeout(() => {
+      btn.classList.remove('btn-ok', 'btn-fail');
+      btn.disabled = false;
+      btn.title = baseTitle;
+    }, 2500);
+  }
+
+  function openItemInfo(btn, typeId) {
+    return _openItemWindow(btn, `/api/ui/open-information/${typeId}`, 'Sent to EVE client');
+  }
+  function openItemMarket(btn, typeId) {
+    return _openItemWindow(btn, `/api/ui/open-market/${typeId}`, 'Sent to EVE client');
   }
 
   function openInEveBtn(contractId) {
@@ -2224,7 +2290,7 @@
             ${list.map(s => `
               <tr>
                 <td style="color:#e2e8f0">${escHtml(s.name || ('Citadel #' + (s.structure_id || '')))}</td>
-                <td><span class="badge badge-blue">${escHtml(s.type_name || '–')}</span></td>
+                <td style="color:#e2e8f0">${itemName(s.type_id, s.type_name || '–')}</td>
                 <td>${systemCell(s)}</td>
                 <td>${citadelStateBadge(s.state)}</td>
                 <td>${fuelExpires(s.fuel_expires)}</td>
@@ -2245,7 +2311,7 @@
           <tbody>
             ${list.map((s, i) => `
               <tr id="pos-row-${i}" style="cursor:pointer" onclick="togglePosDetail(${i}, ${s.starbase_id}, ${s.system_id})">
-                <td style="color:#e2e8f0">${escHtml(s.type_name || ('Type #' + (s.type_id || '')))}</td>
+                <td style="color:#e2e8f0">${itemName(s.type_id, s.type_name || ('Type #' + (s.type_id || '')))}</td>
                 <td>${systemCell(s)}</td>
                 <td>${posStateBadge(s.state)}</td>
                 <td>${s.onlined_since ? new Date(s.onlined_since).toLocaleDateString() : '–'}</td>
@@ -2329,7 +2395,7 @@
   function renderPosDetail(d) {
     const fuels = (d.fuels || []).map(f =>
       `<div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#94a3b8;padding:0.2rem 0">
-         <span>${escHtml(f.type_name || 'Type #' + f.type_id)}</span>
+         <span>${itemName(f.type_id, f.type_name || 'Type #' + f.type_id)}</span>
          <span style="color:#38bdf8">${fmtNum(f.quantity)}</span>
        </div>`).join('') || '<div style="color:#66768c;font-size:0.8rem">No fuel data.</div>';
 
@@ -2562,7 +2628,7 @@
     return `
       <div class="${cardClass}" onclick="openProjectContributors('${p.id}')">
         <div style="display:flex;justify-content:space-between;align-items:start;gap:0.5rem;margin-bottom:0.75rem">
-          <div style="font-size:0.95rem;font-weight:600;color:#f8fafc">${escHtml(p.name)}</div>
+          <div style="font-size:0.95rem;font-weight:600;color:#f8fafc">${itemName(p.market?.type_id, p.name)}</div>
           <div>${projectPriorityBadge(p.sort_priority)}${stateBadge(p.state)}${updateBadge}${fixedPriceBadge}</div>
         </div>
         <div class="progress-wrap">
@@ -3869,7 +3935,7 @@
                         white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
               ${escHtml(ship?.name || '–')}
             </div>
-            <div style="font-size:0.75rem;color:#94a3b8">${escHtml(ship?.type_name || '')}</div>
+            <div style="font-size:0.75rem;color:#94a3b8">${itemName(ship?.type_id, ship?.type_name || '')}</div>
           </div>
         </div>`;
 

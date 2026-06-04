@@ -572,6 +572,34 @@ async def open_contract_in_client(contract_id: int, access_token: str) -> None:
         r.raise_for_status()
 
 
+async def open_information_in_client(type_id: int, access_token: str) -> None:
+    """Open the in-game Show Info window for a type in the authenticated character's client."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://esi.evetech.net/ui/openwindow/information",
+            params={"target_id": type_id},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "X-Compatibility-Date": "2026-01-01",
+            },
+        )
+        r.raise_for_status()
+
+
+async def open_market_in_client(type_id: int, access_token: str) -> None:
+    """Open the in-game Market Details window for a type in the authenticated character's client."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            "https://esi.evetech.net/ui/openwindow/marketdetails",
+            params={"type_id": type_id},
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "X-Compatibility-Date": "2026-01-01",
+            },
+        )
+        r.raise_for_status()
+
+
 async def get_server_status() -> dict | None:
     """EVE Tranquility server status. Public ESI, no auth. Returns None on failure."""
     async with httpx.AsyncClient(timeout=4.0) as client:
