@@ -866,13 +866,13 @@
     .eve-item-icon {
       display: inline-flex; align-items: center; justify-content: center;
       width: 16px; height: 16px; padding: 0; border: 0; background: none;
-      cursor: pointer; opacity: 0.55; transition: opacity 0.15s, filter 0.15s;
-      vertical-align: middle; flex: 0 0 auto;
+      cursor: pointer; opacity: 0.55; transition: opacity 0.15s, color 0.15s;
+      vertical-align: middle; flex: 0 0 auto; color: #e2e8f0;
     }
-    .eve-item-icon img { width: 14px; height: 14px; display: block; }
-    .eve-item-icon:hover { opacity: 1; }
-    .eve-item-icon.btn-ok  { opacity: 1; filter: hue-rotate(80deg) saturate(2); }
-    .eve-item-icon.btn-fail { opacity: 1; filter: hue-rotate(-50deg) saturate(3); }
+    .eve-item-icon svg { width: 14px; height: 14px; display: block; }
+    .eve-item-icon:hover { opacity: 1; color: #38bdf8; }
+    .eve-item-icon.btn-ok  { opacity: 1; color: #4ade80; }
+    .eve-item-icon.btn-fail { opacity: 1; color: #f87171; }
     .eve-item-icon:disabled { cursor: default; }
     .fit-eft { background: #0f1117; border: 1px solid #2d3348; border-radius: 8px;
       padding: 0.75rem; margin: 0; color: #cbd5e1; font-family: ui-monospace, SFMono-Regular,
@@ -2068,11 +2068,19 @@
     const info = `<button class="eve-item-icon" title="Show info in EVE"
         aria-label="Show info in EVE"
         onclick="event.stopPropagation(); openItemInfo(this, ${t})">
-        <img src="/info-icon.png" alt=""></button>`;
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><line x1="12" y1="11.5" x2="12" y2="16.5"/>
+          <circle cx="12" cy="7.8" r="0.6" fill="currentColor" stroke="none"/>
+        </svg></button>`;
     const market = `<button class="eve-item-icon" title="View market in EVE"
         aria-label="View market in EVE"
         onclick="event.stopPropagation(); openItemMarket(this, ${t})">
-        <img src="/market-icon.png" alt=""></button>`;
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="18" y1="20" x2="18" y2="10"/>
+        </svg></button>`;
     return `<span class="eve-item"><span class="eve-item-name">${safe}</span>${info}${market}</span>`;
   }
 
