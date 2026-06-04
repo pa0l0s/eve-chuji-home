@@ -75,3 +75,20 @@ async def test_open_market_esi_failure_maps_to_502(client):
     cookies = await _auth_cookie()
     r = await client.post("/api/ui/open-market/587", cookies=cookies)
     assert r.status_code == 502
+
+
+@respx.mock
+async def test_open_information_esi_failure_maps_to_502(client):
+    respx.post(INFO_URL).mock(return_value=Response(500, json={}))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/ui/open-information/587", cookies=cookies)
+    assert r.status_code == 502
+
+
+@respx.mock
+async def test_open_market_403_maps_to_scope_message(client):
+    respx.post(MARKET_URL).mock(return_value=Response(403, json={}))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/ui/open-market/587", cookies=cookies)
+    assert r.status_code == 403
+    assert "esi-ui.open_window.v1" in r.json()["detail"]
