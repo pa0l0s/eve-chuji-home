@@ -2031,7 +2031,7 @@
           <span class="badge badge-muted">${typeLabel(c.type)}</span></div>
         <div><span style="color:#808fa6">Contract Price</span><br>${price}</div>
         <div><span style="color:#808fa6">Issuer</span><br>
-          <span style="color:#94a3b8">${escHtml(c.issuer_name || '–')}</span></div>
+          <span style="color:#94a3b8;display:inline-flex;align-items:center;gap:0.35rem">${escHtml(c.issuer_name || '–')}${c.issuer_id ? characterLinks(c.issuer_id) : ''}</span></div>
         <div><span style="color:#808fa6">Status</span><br>${statusBadge(c.status)}</div>
         <div><span style="color:#808fa6">Expires</span><br>${timeLeft(c.date_expired)}</div>
         <div style="align-self:end">${openInEveBtn(c.contract_id)}</div>
