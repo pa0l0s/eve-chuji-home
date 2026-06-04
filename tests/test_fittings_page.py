@@ -104,8 +104,26 @@ def test_parse_eft_defaults_fit_name():
 
 
 def test_parse_eft_rejects_missing_header():
-    import pytest
     with pytest.raises(ValueError):
         parse_eft("Damage Control II\n200mm AutoCannon II")
     with pytest.raises(ValueError):
         parse_eft("")
+
+
+def test_parse_eft_charge_with_quantity_strips_qty():
+    p = parse_eft("[Rifter, X]\n200mm AutoCannon II, EMP S x10")
+    line = p["lines"][0]
+    assert line["name"] == "200mm AutoCannon II"
+    assert line["charge"] == "EMP S"      # qty stripped from charge
+    assert line["qty"] == 1
+
+
+def test_parse_eft_zero_quantity_clamped_to_one():
+    p = parse_eft("[Rifter, X]\nHobgoblin II x0")
+    assert p["lines"][0]["qty"] == 1
+
+
+def test_parse_eft_handles_crlf():
+    p = parse_eft("[Rifter, X]\r\nDamage Control II\r\n")
+    assert p["ship_name"] == "Rifter"
+    assert [l["name"] for l in p["lines"]] == ["Damage Control II"]

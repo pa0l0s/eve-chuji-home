@@ -1019,6 +1019,14 @@ def eft_from_esi_fitting(fitting: dict, name_map: dict[int, str]) -> str:
     return build_eft(ship_name, fitting.get("name", "Fitting"), items)
 
 
+def _strip_trailing_qty(s: str) -> tuple[str, int]:
+    """Split a trailing ' xN' quantity off an EFT line. Returns (name, qty>=1)."""
+    m = re.search(r"\sx(\d+)$", s)
+    if m:
+        return s[:m.start()].strip(), max(1, int(m.group(1)))
+    return s, 1
+
+
 def parse_eft(text: str) -> dict:
     """Parse EFT text into {ship_name, fit_name, lines:[{name, charge, qty}]}.
 
@@ -1039,7 +1047,7 @@ def parse_eft(text: str) -> dict:
         if s.startswith("[") and s.endswith("]") and "," in s:
             header = s
             body_start = i + 1
-        break  # first non-empty line decides: header or error
+        break  # always stop at the first non-empty line: it's the header or it's invalid
     if header is None:
         raise ValueError("Not a valid EFT fit (missing [Ship, Name] header)")
     ship_name, _, fit_name = header[1:-1].partition(",")
@@ -1057,12 +1065,11 @@ def parse_eft(text: str) -> dict:
         if "," in s:
             name_part, _, charge_part = s.partition(",")
             name_part = name_part.strip()
-            charge = charge_part.strip() or None
-        qty = 1
-        m = re.search(r"\sx(\d+)$", name_part)
-        if m:
-            qty = int(m.group(1))
-            name_part = name_part[:m.start()].strip()
+            charge_part = charge_part.strip()
+            if charge_part:
+                charge, _ = _strip_trailing_qty(charge_part)  # drop any qty on the charge
+                charge = charge or None
+        name_part, qty = _strip_trailing_qty(name_part)
         if not name_part:
             continue
         out.append({"name": name_part, "charge": charge, "qty": qty})
