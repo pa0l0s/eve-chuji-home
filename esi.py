@@ -954,3 +954,65 @@ def build_eft(ship_name: str, fit_name: str, items: list[dict]) -> str:
     body = "\n\n".join(sections)
     header = f"[{ship_name}, {fit_name}]"
     return f"{header}\n{body}" if body else header
+
+
+# ── Character fittings (ESI write API; compatibility-date base, no /latest) ────
+_FITTINGS_BASE = "https://esi.evetech.net/characters"
+_FIT_COMPAT = "2026-01-01"
+
+
+def _fit_headers(access_token: str) -> dict:
+    return {"Authorization": f"Bearer {access_token}", "X-Compatibility-Date": _FIT_COMPAT}
+
+
+async def list_character_fittings(character_id: int, access_token: str) -> list[dict]:
+    """GET the character's saved fittings (raw ESI list)."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{_FITTINGS_BASE}/{character_id}/fittings/",
+                             headers=_fit_headers(access_token))
+        r.raise_for_status()
+        return r.json()
+
+
+async def create_character_fitting(character_id: int, access_token: str, fitting: dict) -> dict:
+    """POST a new fitting; returns {'fitting_id': int}."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(f"{_FITTINGS_BASE}/{character_id}/fittings/",
+                              json=fitting, headers=_fit_headers(access_token))
+        r.raise_for_status()
+        return r.json()
+
+
+async def delete_character_fitting(character_id: int, access_token: str, fitting_id: int) -> None:
+    """DELETE one saved fitting."""
+    async with httpx.AsyncClient() as client:
+        r = await client.delete(f"{_FITTINGS_BASE}/{character_id}/fittings/{fitting_id}/",
+                               headers=_fit_headers(access_token))
+        r.raise_for_status()
+
+
+def flag_to_slot_kind(flag: str) -> tuple[str | None, str]:
+    """Map an ESI fitting item flag to (slot, kind) for build_eft.
+    slot ∈ high/mid/low/rig/subsystem/None; kind ∈ module/drone/charge."""
+    if flag.startswith("HiSlot"):        return ("high", "module")
+    if flag.startswith("MedSlot"):       return ("mid", "module")
+    if flag.startswith("LoSlot"):        return ("low", "module")
+    if flag.startswith("RigSlot"):       return ("rig", "module")
+    if flag.startswith("SubSystemSlot"): return ("subsystem", "module")
+    if flag == "DroneBay":               return (None, "drone")
+    return (None, "charge")              # Cargo / FighterBay / anything else
+
+
+def eft_from_esi_fitting(fitting: dict, name_map: dict[int, str]) -> str:
+    """Render an ESI fitting dict to EFT text. name_map: type_id -> name
+    (must cover the ship and every item; missing ids degrade to 'Type #<id>')."""
+    items = []
+    for it in fitting.get("items", []):
+        slot, kind = flag_to_slot_kind(it.get("flag", ""))
+        items.append({
+            "name": name_map.get(it["type_id"], f"Type #{it['type_id']}"),
+            "slot": slot, "kind": kind, "qty": it.get("quantity", 1),
+        })
+    ship_id = fitting["ship_type_id"]
+    ship_name = name_map.get(ship_id, f"Type #{ship_id}")
+    return build_eft(ship_name, fitting.get("name", "Fitting"), items)

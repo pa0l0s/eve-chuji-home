@@ -1,0 +1,68 @@
+import time
+import respx
+from httpx import Response
+
+from esi import (
+    flag_to_slot_kind, eft_from_esi_fitting,
+    list_character_fittings, create_character_fitting, delete_character_fitting,
+    _fitting_meta_cache,
+)
+from db import init_db, upsert_token
+from auth import make_session_cookie
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+async def setup_db():
+    await init_db()
+
+
+async def _auth_cookie(character_id=123) -> dict:
+    await upsert_token(
+        character_id=character_id, character_name="Test Pilot",
+        access_token="valid_acc", refresh_token="valid_ref",
+        expires_at=time.time() + 1200, corporation_id=98340844,
+    )
+    return {"session": make_session_cookie(character_id)}
+
+
+def test_flag_to_slot_kind_modules():
+    assert flag_to_slot_kind("HiSlot0") == ("high", "module")
+    assert flag_to_slot_kind("MedSlot3") == ("mid", "module")
+    assert flag_to_slot_kind("LoSlot7") == ("low", "module")
+    assert flag_to_slot_kind("RigSlot1") == ("rig", "module")
+    assert flag_to_slot_kind("SubSystemSlot2") == ("subsystem", "module")
+
+
+def test_flag_to_slot_kind_drone_and_cargo():
+    assert flag_to_slot_kind("DroneBay") == (None, "drone")
+    assert flag_to_slot_kind("Cargo") == (None, "charge")
+    assert flag_to_slot_kind("FighterBay") == (None, "charge")
+
+
+def test_eft_from_esi_fitting_groups_and_names():
+    fitting = {
+        "name": "My Rifter", "ship_type_id": 587,
+        "items": [
+            {"type_id": 100, "quantity": 1, "flag": "LoSlot0"},
+            {"type_id": 200, "quantity": 1, "flag": "HiSlot0"},
+            {"type_id": 300, "quantity": 5, "flag": "DroneBay"},
+            {"type_id": 400, "quantity": 1000, "flag": "Cargo"},
+        ],
+    }
+    name_map = {587: "Rifter", 100: "Damage Control II", 200: "125mm Gatling AutoCannon II",
+                300: "Hobgoblin II", 400: "EMP S"}
+    eft = eft_from_esi_fitting(fitting, name_map)
+    assert eft.splitlines()[0] == "[Rifter, My Rifter]"
+    assert "Damage Control II" in eft
+    assert "125mm Gatling AutoCannon II" in eft
+    assert "Hobgoblin II x5" in eft
+    assert "EMP S x1000" in eft
+
+
+def test_eft_from_esi_fitting_unknown_name_degrades():
+    fitting = {"name": "F", "ship_type_id": 9, "items": [{"type_id": 8, "quantity": 1, "flag": "LoSlot0"}]}
+    eft = eft_from_esi_fitting(fitting, {})
+    assert eft.splitlines()[0] == "[Type #9, F]"
+    assert "Type #8" in eft
