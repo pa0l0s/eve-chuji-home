@@ -93,13 +93,13 @@ async def open_contract(contract_id: int, session: str | None = Cookie(None)):
     return {"ok": True}
 
 
-@app.post("/api/ui/open-information/{type_id}")
-async def open_information(type_id: int, session: str | None = Cookie(None)):
-    """Open the in-game Show Info window for a type in the user's EVE client."""
+@app.post("/api/ui/open-information/{target_id}")
+async def open_information(target_id: int, session: str | None = Cookie(None)):
+    """Open the in-game Show Info window for a character/corporation/alliance in the user's EVE client."""
     character_id = await get_current_character_id(session)
     try:
         access_token = await get_valid_token(character_id)
-        await open_information_in_client(type_id, access_token)
+        await open_information_in_client(target_id, access_token)
     except httpx.HTTPStatusError as e:
         print(f"ESI open-information HTTP {e.response.status_code}: {e.response.text}")
         if e.response.status_code == 403:

@@ -572,6 +572,19 @@
     .sys-link a:active { transform: translateY(1px); }
     .sys-link img { width: 12px; height: 12px; display: block; }
 
+    .sys-link .ig-info {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 18px; height: 18px; padding: 0; border: 0; border-radius: 3px;
+      background: #252a3d; color: #cbd5e1; cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.1s;
+    }
+    .sys-link .ig-info svg { width: 12px; height: 12px; display: block; }
+    .sys-link .ig-info:hover { background: #38bdf8; color: #0f1117; }
+    .sys-link .ig-info:active { transform: translateY(1px); }
+    .sys-link .ig-info.btn-ok { color: #4ade80; }
+    .sys-link .ig-info.btn-fail { color: #f87171; }
+    .sys-link .ig-info:disabled { cursor: default; }
+
     /* ── Modal ── */
     .modal-backdrop {
       position: fixed;
@@ -2065,14 +2078,7 @@
     const safe = escHtml(name == null ? '' : String(name));
     if (!typeId) return safe;
     const t = Number(typeId);
-    const info = `<button class="eve-item-icon" title="Show info in EVE"
-        aria-label="Show info in EVE"
-        onclick="event.stopPropagation(); openItemInfo(this, ${t})">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/><line x1="12" y1="11.5" x2="12" y2="16.5"/>
-          <circle cx="12" cy="7.8" r="0.6" fill="currentColor" stroke="none"/>
-        </svg></button>`;
+    // ESI openwindow/information does not apply to item types — only market here.
     const market = `<button class="eve-item-icon" title="View market in EVE"
         aria-label="View market in EVE"
         onclick="event.stopPropagation(); openItemMarket(this, ${t})">
@@ -2081,7 +2087,7 @@
           <line x1="6" y1="20" x2="6" y2="14"/><line x1="12" y1="20" x2="12" y2="4"/>
           <line x1="18" y1="20" x2="18" y2="10"/>
         </svg></button>`;
-    return `<span class="eve-item"><span class="eve-item-name">${safe}</span>${info}${market}</span>`;
+    return `<span class="eve-item"><span class="eve-item-name">${safe}</span>${market}</span>`;
   }
 
   async function _openItemWindow(btn, url, okTitle) {
@@ -2109,8 +2115,9 @@
     }, 2500);
   }
 
-  function openItemInfo(btn, typeId) {
-    return _openItemWindow(btn, `/api/ui/open-information/${typeId}`, 'Sent to EVE client');
+  // Opens the in-game Show Info window for a character / corporation / alliance id.
+  function openInfoWindow(btn, targetId) {
+    return _openItemWindow(btn, `/api/ui/open-information/${targetId}`, 'Sent to EVE client');
   }
   function openItemMarket(btn, typeId) {
     return _openItemWindow(btn, `/api/ui/open-market/${typeId}`, 'Sent to EVE client');
@@ -2219,9 +2226,18 @@
     return escHtml(shortLoc(name)) + typeBadge + systemLinks(sysName, sysId);
   }
 
-  function characterZkillLink(id) {
+  // Shared character link/icon group: in-game Show Info + zKillboard.
+  function characterLinks(id) {
     if (!id) return '';
     return `<span class="sys-link" style="margin-left:0">
+      <button class="ig-info" title="Show info in EVE" aria-label="Show info in EVE"
+              onclick="event.stopPropagation(); openInfoWindow(this, ${Number(id)})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><line x1="12" y1="11.5" x2="12" y2="16.5"/>
+          <circle cx="12" cy="7.8" r="0.6" fill="currentColor" stroke="none"/>
+        </svg>
+      </button>
       <a href="https://zkillboard.com/character/${id}/" target="_blank" rel="noopener" title="zKillboard">
         <img src="https://www.google.com/s2/favicons?sz=32&domain=zkillboard.com" alt="zK">
       </a>
@@ -2629,7 +2645,7 @@
                <img src="https://images.evetech.net/characters/${c.id}/portrait?size=64"
                     alt="" style="width:28px;height:28px;border-radius:50%;background:#252a3d;flex:0 0 auto">
                <span style="color:#e2e8f0;font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 auto">${escHtml(c.name || 'Unknown')}</span>
-               ${characterZkillLink(c.id)}
+               ${characterLinks(c.id)}
              </div>`).join('')}
          </div>`
       : '';
@@ -2787,7 +2803,7 @@
           <div style="min-width:0">
             <div style="color:#e2e8f0;font-weight:500;display:flex;align-items:center;gap:0.4rem">
               <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(c.name || 'Unknown')}</span>
-              ${characterZkillLink(c.id)}
+              ${characterLinks(c.id)}
             </div>
             <div style="height:4px;background:#252a3d;border-radius:2px;margin-top:0.3rem;overflow:hidden">
               <div style="height:100%;background:#38bdf8;width:${pct.toFixed(1)}%"></div>
@@ -3062,7 +3078,7 @@
                 style="width:32px;height:32px;border-radius:50%;background:#252a3d">
            <div>
              <div style="font-size:0.85rem;color:#e2e8f0;font-weight:600">
-               ${escHtml(bossName)} ${characterZkillLink(bossId)}
+               ${escHtml(bossName)} ${characterLinks(bossId)}
              </div>
              <div style="font-size:0.65rem;color:#66768c;text-transform:uppercase;letter-spacing:0.06em">
                Fleet Boss
@@ -3278,7 +3294,7 @@
     return `
       <img class="ft-portrait" src="https://images.evetech.net/characters/${charId}/portrait?size=32" alt="">
       <span style="color:#e2e8f0">${escHtml(name)}</span>
-      ${characterZkillLink(charId)}`;
+      ${characterLinks(charId)}`;
   }
 
   function savedCellAttrs(saved) {
@@ -3676,7 +3692,7 @@
             <img src="https://images.evetech.net/characters/${u.character_id}/portrait?size=64"
                  style="width:28px;height:28px;border-radius:50%;background:#252a3d">
             <span>${escHtml(u.character_name || 'Unknown')}</span>
-            ${characterZkillLink(u.character_id)}
+            ${characterLinks(u.character_id)}
           </td>
           <td style="color:#808fa6;font-size:0.75rem;font-variant-numeric:tabular-nums">${u.character_id}</td>
           <td style="color:#94a3b8">${created}</td>
@@ -3878,7 +3894,7 @@
           <div class="char-info">
             <div class="name" style="display:flex;align-items:center;gap:0.4rem">
               ${escHtml(p?.character_name || 'Unknown')}
-              ${characterZkillLink(m.character_id)}
+              ${characterLinks(m.character_id)}
             </div>
             <div class="corp" id="corp-name-display">Corp ID: ${p?.corporation_id ?? '–'}</div>
             <div class="sec-status" style="color:${secStatColor}">

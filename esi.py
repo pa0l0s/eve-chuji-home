@@ -572,12 +572,13 @@ async def open_contract_in_client(contract_id: int, access_token: str) -> None:
         r.raise_for_status()
 
 
-async def open_information_in_client(type_id: int, access_token: str) -> None:
-    """Open the in-game Show Info window for a type in the authenticated character's client."""
+async def open_information_in_client(target_id: int, access_token: str) -> None:
+    """Open the in-game Show Info window for a character/corporation/alliance in the
+    authenticated character's client. (ESI openwindow/information does not support item types.)"""
     async with httpx.AsyncClient() as client:
         r = await client.post(
             "https://esi.evetech.net/ui/openwindow/information",
-            params={"target_id": type_id},
+            params={"target_id": target_id},
             headers={
                 "Authorization": f"Bearer {access_token}",
                 "X-Compatibility-Date": "2026-01-01",
