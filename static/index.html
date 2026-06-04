@@ -1954,8 +1954,8 @@
 
   function issuerLine(c) {
     if (!c.issuer_name) return '';
-    return `<div style="font-size:0.7rem;color:#66768c;margin-top:0.2rem">
-              by ${escHtml(c.issuer_name)}
+    return `<div style="font-size:0.7rem;color:#66768c;margin-top:0.2rem;display:flex;align-items:center;gap:0.3rem">
+              <span>by ${escHtml(c.issuer_name)}</span>${c.issuer_id ? characterLinks(c.issuer_id) : ''}
             </div>`;
   }
 
@@ -1966,7 +1966,9 @@
              ${new Date(c.date_accepted).toLocaleDateString()}
            </div>`
         : '';
-      return `<span style="color:#4ade80">${escHtml(c.acceptor_name)}</span>${accepted}`;
+      return `<span style="display:inline-flex;align-items:center;gap:0.3rem">
+                <span style="color:#4ade80">${escHtml(c.acceptor_name)}</span>${c.acceptor_id ? characterLinks(c.acceptor_id) : ''}
+              </span>${accepted}`;
     }
     return '<span style="color:#66768c">–</span>';
   }
