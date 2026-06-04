@@ -1,6 +1,7 @@
 import ast
 import os
 import asyncio
+import re
 import time
 import base64
 import httpx
@@ -1016,3 +1017,53 @@ def eft_from_esi_fitting(fitting: dict, name_map: dict[int, str]) -> str:
     ship_id = fitting["ship_type_id"]
     ship_name = name_map.get(ship_id, f"Type #{ship_id}")
     return build_eft(ship_name, fitting.get("name", "Fitting"), items)
+
+
+def parse_eft(text: str) -> dict:
+    """Parse EFT text into {ship_name, fit_name, lines:[{name, charge, qty}]}.
+
+    The first non-empty line must be '[Ship Name, Fit Name]'. Subsequent
+    non-empty lines are modules/drones/cargo; 'Name, Charge' splits an inline
+    loaded charge; a trailing ' xN' sets quantity. Lines beginning with '['
+    after the header (e.g. '[Empty High slot]') and blank lines are ignored —
+    slot is derived later from dogma, not from EFT line position.
+    Raises ValueError if the header is missing or malformed.
+    """
+    lines_in = (text or "").splitlines()
+    header = None
+    body_start = 0
+    for i, raw in enumerate(lines_in):
+        s = raw.strip()
+        if not s:
+            continue
+        if s.startswith("[") and s.endswith("]") and "," in s:
+            header = s
+            body_start = i + 1
+        break  # first non-empty line decides: header or error
+    if header is None:
+        raise ValueError("Not a valid EFT fit (missing [Ship, Name] header)")
+    ship_name, _, fit_name = header[1:-1].partition(",")
+    ship_name = ship_name.strip()
+    fit_name = fit_name.strip() or "Imported Fit"
+    if not ship_name:
+        raise ValueError("Not a valid EFT fit (missing ship name)")
+    out = []
+    for raw in lines_in[body_start:]:
+        s = raw.strip()
+        if not s or s.startswith("["):
+            continue
+        name_part = s
+        charge = None
+        if "," in s:
+            name_part, _, charge_part = s.partition(",")
+            name_part = name_part.strip()
+            charge = charge_part.strip() or None
+        qty = 1
+        m = re.search(r"\sx(\d+)$", name_part)
+        if m:
+            qty = int(m.group(1))
+            name_part = name_part[:m.start()].strip()
+        if not name_part:
+            continue
+        out.append({"name": name_part, "charge": charge, "qty": qty})
+    return {"ship_name": ship_name, "fit_name": fit_name, "lines": out}

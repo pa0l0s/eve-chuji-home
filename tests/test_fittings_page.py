@@ -3,7 +3,7 @@ import respx
 from httpx import Response
 
 from esi import (
-    flag_to_slot_kind, eft_from_esi_fitting,
+    flag_to_slot_kind, eft_from_esi_fitting, parse_eft,
     list_character_fittings, create_character_fitting, delete_character_fitting,
     _fitting_meta_cache,
 )
@@ -66,3 +66,46 @@ def test_eft_from_esi_fitting_unknown_name_degrades():
     eft = eft_from_esi_fitting(fitting, {})
     assert eft.splitlines()[0] == "[Type #9, F]"
     assert "Type #8" in eft
+
+
+def test_parse_eft_basic_groups_and_charge():
+    text = (
+        "[Rifter, My Rifter]\n"
+        "Damage Control II\n"
+        "\n"
+        "200mm AutoCannon II, EMP S\n"
+        "\n"
+        "Small Projectile Burst Aerator I\n"
+        "\n"
+        "Hobgoblin II x5\n"
+        "EMP S x1000\n"
+    )
+    p = parse_eft(text)
+    assert p["ship_name"] == "Rifter"
+    assert p["fit_name"] == "My Rifter"
+    names = [l["name"] for l in p["lines"]]
+    assert names == ["Damage Control II", "200mm AutoCannon II",
+                     "Small Projectile Burst Aerator I", "Hobgoblin II", "EMP S"]
+    ac = next(l for l in p["lines"] if l["name"] == "200mm AutoCannon II")
+    assert ac["charge"] == "EMP S"
+    drone = next(l for l in p["lines"] if l["name"] == "Hobgoblin II")
+    assert drone["qty"] == 5
+
+
+def test_parse_eft_skips_empty_slot_markers_and_blank_lines():
+    text = "[Rifter, X]\n[Empty High slot]\n\nDamage Control II\n"
+    p = parse_eft(text)
+    assert [l["name"] for l in p["lines"]] == ["Damage Control II"]
+
+
+def test_parse_eft_defaults_fit_name():
+    p = parse_eft("[Rifter, ]\nDamage Control II")
+    assert p["fit_name"] == "Imported Fit"
+
+
+def test_parse_eft_rejects_missing_header():
+    import pytest
+    with pytest.raises(ValueError):
+        parse_eft("Damage Control II\n200mm AutoCannon II")
+    with pytest.raises(ValueError):
+        parse_eft("")
