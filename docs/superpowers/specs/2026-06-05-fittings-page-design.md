@@ -1,4 +1,4 @@
-# Character Fittings Page (list, detail, EFT export/import, delete)
+# Character Fittings Page (list, detail, EFT export/import, delete, rename, duplicate)
 
 **Date:** 2026-06-05
 **Status:** Approved (design)
@@ -8,7 +8,7 @@
 Add a **Fittings** page to the SPA that shows the logged-in character's personal
 EVE fittings. Each fit lists with a ship icon and opens a detail popup (grouped
 item table, like ship-contract details). The user can export a fit to EFT text,
-import a new fit from EFT text, and delete a fit.
+import a new fit from EFT text, delete a fit, rename a fit, and duplicate a fit.
 
 Personal fittings only — ESI exposes no corporation fittings endpoint. The page
 shows the fittings of whoever is logged in.
@@ -56,6 +56,19 @@ shows the fittings of whoever is logged in.
   loaded charges (`Module Name, Charge Name`).
 - **Loaded charges on import:** assigned the **same ESI flag** as the module they
   are loaded into (closest faithful round-trip; mirrors the in-game fitting store).
+- **Rename / Duplicate:** ESI has no rename/edit/single-GET endpoint — only
+  list/create/delete. Both operations therefore **copy the source fit's raw items
+  server-side** (lossless, no EFT round-trip), keyed off the fitting list:
+  - **Rename:** create a new fit with the source's items + the new name, then —
+    only after the create succeeds — delete the source. Create-before-delete so a
+    failure never loses the fit. If the create succeeds but the delete fails, the
+    rename returns a 502 noting the original could not be removed (a harmless
+    duplicate remains rather than data loss).
+  - **Duplicate:** create a new fit with the source's items, keeping the original.
+    New name = `"{source name} copy"`; if that name already exists, try
+    `"{source name} copy2"`, `copy3`, … until free. (Repeatedly duplicating the
+    same fit yields `copy`, `copy2`, `copy3`.) Names are capped at EVE's 50-char
+    fitting-name limit.
 - **Navigation:** new top-level `Fittings` nav tab.
 
 ## ESI Data Shapes
@@ -78,6 +91,10 @@ shows the fittings of whoever is logged in.
 → `{ "fitting_id": 42 }`.
 
 `DELETE /characters/{character_id}/fittings/{fitting_id}/` → 204.
+
+There is **no** rename/edit endpoint and **no** single-fitting GET. Rename and
+duplicate are composed from list + create (+ delete for rename); the source fit is
+found by scanning the `GET …/fittings/` list for the matching `fitting_id`.
 
 **Item `flag` values** used here: `HiSlot0..7`, `MedSlot0..7`, `LoSlot0..7`,
 `RigSlot0..2`, `SubSystemSlot0..4`, `DroneBay`, `Cargo`. Any other flag
@@ -176,6 +193,32 @@ Slot index counters are capped at the EVE maximums (Hi/Med/Lo 8, Rig 3,
 SubSystem 5); overflow modules fall back to `Cargo` so a malformed/overfull paste
 still imports rather than erroring.
 
+**Copy helpers for rename/duplicate** (pure):
+
+```python
+def fitting_to_create_payload(fit: dict, name: str) -> dict:
+    """Build an ESI create payload that clones `fit` under a new name (≤50 chars).
+    Copies only the ESI item fields, ignoring any enrichment (ship_name/eft/name)."""
+    return {
+        "name": name[:50],
+        "description": fit.get("description") or "",
+        "ship_type_id": fit["ship_type_id"],
+        "items": [{"type_id": it["type_id"], "quantity": it["quantity"], "flag": it["flag"]}
+                  for it in fit.get("items", [])],
+    }
+
+
+def next_copy_name(base: str, existing: set[str]) -> str:
+    """'{base} copy', else '{base} copy2', 'copy3', … avoiding `existing`. ≤50 chars."""
+    candidate = f"{base} copy"
+    if candidate not in existing:
+        return candidate[:50]
+    n = 2
+    while f"{base} copy{n}" in existing:
+        n += 1
+    return f"{base} copy{n}"[:50]
+```
+
 ### Backend — routes (`main.py`)
 
 ```python
@@ -195,19 +238,18 @@ async def my_fittings(session: str | None = Cookie(None)):
     ids = {f["ship_type_id"] for f in fits} | {
         it["type_id"] for f in fits for it in f.get("items", [])
     }
-    name_map = await bulk_type_names(ids)   # {id: name}; see note below
+    name_map = await resolve_names(list(ids))   # {id: name}; degrades to {} on error
     for f in fits:
         f["ship_name"] = name_map.get(f["ship_type_id"], f"Type #{f['ship_type_id']}")
-        f["eft"] = eft_from_esi_fitting(f, name_map)
         for it in f.get("items", []):
             it["name"] = name_map.get(it["type_id"], f"Type #{it['type_id']}")
+        f["eft"] = eft_from_esi_fitting(f, name_map)
     return {"fittings": fits}
 ```
 
-`bulk_type_names(ids)` resolves a set of type_ids → names. Implement by reusing
-`POST /universe/names/` (the same endpoint `resolve_names` already uses — it
-accepts type_ids and returns their names), exposed as a small helper. Returns
-`{type_id: name}` and degrades missing ids to `Type #<id>`.
+`resolve_names` (esi.py ~390) already resolves type_ids → names via
+`POST /universe/names/` and returns `{id: name}`, degrading to `{}` on ESI error;
+missing ids fall back to `Type #<id>` at the call site. No new helper needed.
 
 ```python
 @app.post("/api/me/fittings/import")
@@ -250,6 +292,65 @@ async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
     return {"ok": True}
 ```
 
+**Duplicate** and **rename** both fetch the fitting list, find the source by id,
+and clone it via `create_character_fitting`. A small internal helper centralises
+the read-then-find and the ESI-error → HTTP mapping (shared by all the new routes):
+
+```python
+def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
+    if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
+        return HTTPException(403, f"Missing scope: {scope}")
+    return HTTPException(502, "ESI unavailable")
+
+
+@app.post("/api/me/fittings/{fitting_id}/duplicate")
+async def duplicate_fitting(fitting_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    token = await get_valid_token(character_id)
+    try:
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    src = next((f for f in fits if f["fitting_id"] == fitting_id), None)
+    if src is None:
+        raise HTTPException(404, "Fitting not found")
+    name = next_copy_name(src.get("name") or "Fitting", {f.get("name") for f in fits})
+    try:
+        created = await create_character_fitting(
+            character_id, token, fitting_to_create_payload(src, name))
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    return {"fitting_id": created.get("fitting_id"), "name": name}
+
+
+@app.post("/api/me/fittings/{fitting_id}/rename")
+async def rename_fitting(fitting_id: int, body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    token = await get_valid_token(character_id)
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(400, "Name required")
+    try:
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    src = next((f for f in fits if f["fitting_id"] == fitting_id), None)
+    if src is None:
+        raise HTTPException(404, "Fitting not found")
+    # Create the renamed copy FIRST; only delete the original once it exists.
+    try:
+        created = await create_character_fitting(
+            character_id, token, fitting_to_create_payload(src, new_name))
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    try:
+        await delete_character_fitting(character_id, token, fitting_id)
+    except httpx.HTTPError:
+        # New fit exists but the old one survives — report rather than lose data.
+        raise HTTPException(502, "Renamed copy created, but the original could not be removed")
+    return {"fitting_id": created.get("fitting_id"), "name": new_name}
+```
+
 ### Frontend (`static/index.html`)
 
 **Nav + view wiring:**
@@ -271,16 +372,25 @@ async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
 
 **`openFitDetail(fittingId)`:**
 - Find the fit in `fittingsData`. `showModal(escHtml(fit.name), bodyHtml)`.
-- `bodyHtml`: a button bar (**Export EFT**, **Delete**) + a slot-grouped table.
-  Group `fit.items` by `flag_to_slot_kind` equivalent in JS (a small `slotOf(flag)`
-  helper) into High/Mid/Low/Rig/Subsystem/Drones/Cargo; render only non-empty
-  sections. Each row: quantity + `itemName(it.type_id, it.name)`.
+- `bodyHtml`: a button bar (**Export EFT**, **Rename**, **Duplicate**, **Delete**)
+  + an inline banner area + a slot-grouped table. Group `fit.items` by
+  `flag_to_slot_kind` equivalent in JS (a small `fitSlotOf(flag)` helper) into
+  High/Mid/Low/Rig/Subsystem/Drones/Cargo; render only non-empty sections. Each
+  row: quantity + `itemName(it.type_id, it.name)`.
 - **Export EFT** button → `renderFittingModal(fit.eft)` (existing helper: shows the
   EFT `<pre>` + Copy button).
-- **Delete** button → `confirmDeleteFit(fit)`: a confirm (inline two-step: button
-  text changes to "Confirm delete?" and a second click performs it, matching the
-  app's no-`window.confirm` style) → `DELETE /api/me/fittings/${fittingId}` →
-  on success close modal + `loadFittings()`; on error show a banner in the modal.
+- **Rename** button → `openRenameFitting(fittingId)`: swaps in a small text input
+  (prefilled with the current name) + Save. Save → `POST
+  /api/me/fittings/${id}/rename` with `{name}` → on success close modal +
+  `loadFittings()`; on error show the banner.
+- **Duplicate** button → `duplicateFit(fittingId)`: `POST
+  /api/me/fittings/${id}/duplicate` (no body) → on success close modal +
+  `loadFittings()`; on error show the banner. Button disables while in flight.
+- **Delete** button → `confirmDeleteFit(fittingId)`: a confirm (inline two-step:
+  button text changes to "Confirm delete?" and a second click performs it,
+  matching the app's no-`window.confirm` style) → `DELETE
+  /api/me/fittings/${fittingId}` → on success close modal + `loadFittings()`; on
+  error show the banner.
 
 **Import modal (`openImportFitting()`):**
 - `showModal('Import EFT Fitting', html)` where `html` is a `<textarea>` +
@@ -292,8 +402,11 @@ async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
 
 - Backend: 401 unauthenticated (via `get_current_character_id`); 403 with the
   matching scope message on ESI 403; 400 "Not a valid EFT fit" when `parse_eft`
-  fails; 400 with the unresolved-names list when name resolution fails; 502 for
-  other ESI failures.
+  fails; 400 with the unresolved-names list when name resolution fails; 400 "Name
+  required" on an empty rename; 404 "Fitting not found" when a rename/duplicate
+  source id is missing; 502 for other ESI failures. Rename returns 502 "Renamed
+  copy created, but the original could not be removed" if the new fit is created
+  but the source delete fails (no data loss — a duplicate remains).
 - Frontend: failures surface as banners inside the relevant view/modal — no
   `alert()`/`window.confirm()`. Delete uses an inline two-step confirm.
 - Missing/unknown type names degrade to `Type #<id>` rather than failing the list.
@@ -312,12 +425,20 @@ covers the mail EFT path and stays as-is):
 - `eft_to_esi_fitting` (respx-mocked `resolve_type_ids`/`get_fitting_type_meta`):
   slot-flag index assignment, inline charge gets the module's flag, unresolved
   name → `ValueError`.
+- Pure `next_copy_name`: `base` → `base copy`; `base copy` taken → `base copy2`;
+  `base copy` + `base copy2` taken → `base copy3`. Pure `fitting_to_create_payload`:
+  copies `ship_type_id` + only `{type_id, quantity, flag}` item fields, drops
+  enrichment keys, caps name at 50 chars.
 - Routes (respx, mirroring existing route tests + `tests/conftest.py` auth
   fixtures): `GET /api/me/fittings` happy path (mock ESI list + names) →
   enriched payload with `ship_name`/`eft`/item `name`; `POST .../import` happy
   path → `{fitting_id}`; `DELETE .../{id}` happy path → `{ok: true}`;
-  unauthenticated → 401 for each; ESI 403 → 403 scope message; ESI 5xx → 502;
-  import of junk text → 400.
+  `POST .../{id}/duplicate` happy path (mock list + create) → new `{fitting_id,
+  name}` with the `copy` name and the source's items in the create body;
+  `POST .../{id}/rename` happy path (mock list + create + delete) → calls create
+  then delete and returns the new id; rename with empty name → 400; rename/
+  duplicate with unknown id → 404; unauthenticated → 401 for each; ESI 403 → 403
+  scope message; ESI 5xx → 502; import of junk text → 400.
 
 **Frontend:** plain JS, no harness — validate by extracting inline `<script>` and
 running `node --check`, plus manual verification that the page lists fits, the
@@ -326,6 +447,7 @@ popup groups items, export shows EFT, import round-trips, and delete confirms.
 ## Out of Scope
 
 - No corporation fittings (no such ESI endpoint).
-- No editing an existing fit in place (delete + re-import instead).
+- No in-place item editing. Renaming is supported (via recreate); changing a fit's
+  modules means delete + re-import, or duplicate + edit in-game.
 - No fit simulation / stats (EHP, DPS) — display and EFT round-trip only.
 - No changes to the existing mail fitting-link popup path.
