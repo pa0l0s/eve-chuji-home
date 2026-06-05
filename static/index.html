@@ -3789,13 +3789,7 @@
   let fitPage = 0;
   const FIT_PAGE_SIZE = 24;
 
-  function setFitFilter(v) {
-    fitFilter = v.trim().toLowerCase(); fitPage = 0;
-    const matches = fittingsView();
-    console.log('[fit search]', JSON.stringify(fitFilter), 'loaded=', fittingsData.length,
-                'matches=', matches.length, 'sample=', matches.slice(0, 5).map(f => f.name));
-    renderFittingsList();
-  }
+  function setFitFilter(v) { fitFilter = v.trim().toLowerCase(); fitPage = 0; renderFittingsList(); }
   function setFitSort(key) {
     if (fitSort.key === key) fitSort.dir *= -1; else fitSort = { key, dir: 1 };
     fitPage = 0; renderFittingsList();
@@ -3853,7 +3847,7 @@
     });
     const countEl = document.getElementById('fittings-count');
     if (countEl) countEl.textContent =
-      `loaded ${fittingsData.length} · showing ${total}` + (fitFilter ? ' (filtered)' : '');
+      fitFilter ? `${total} of ${fittingsData.length} fits` : `${total} fits`;
     const pager = document.getElementById('fittings-pager');
     const pageInfo = document.getElementById('fittings-pageinfo');
     if (pageInfo) pageInfo.textContent = total ? `Page ${fitPage + 1} of ${pages}` : '';
