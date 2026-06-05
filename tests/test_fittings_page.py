@@ -217,3 +217,89 @@ async def test_eft_to_esi_fitting_qty_gt_1_module_with_charge():
     # one charge, inheriting the LAST module flag
     charges = [i for i in items if i["type_id"] == 210]
     assert charges == [{"type_id": 210, "quantity": 1, "flag": "HiSlot1"}]
+
+
+# ── Route tests ───────────────────────────────────────────────────────────────
+
+FITS = "https://esi.evetech.net/characters/123/fittings"
+NAMES = "https://esi.evetech.net/latest/universe/names/"
+
+
+async def test_my_fittings_requires_auth(client):
+    r = await client.get("/api/me/fittings")
+    assert r.status_code == 401
+
+
+@respx.mock
+async def test_my_fittings_happy_path(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[{
+        "fitting_id": 1, "name": "My Rifter", "description": "",
+        "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}],
+    }]))
+    respx.post(NAMES).mock(return_value=Response(200, json=[
+        {"id": 587, "name": "Rifter"}, {"id": 100, "name": "Damage Control II"}]))
+    cookies = await _auth_cookie()
+    r = await client.get("/api/me/fittings", cookies=cookies)
+    assert r.status_code == 200
+    fits = r.json()["fittings"]
+    assert fits[0]["ship_name"] == "Rifter"
+    assert fits[0]["items"][0]["name"] == "Damage Control II"
+    assert fits[0]["eft"].splitlines()[0] == "[Rifter, My Rifter]"
+
+
+@respx.mock
+async def test_my_fittings_403_maps_to_scope(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(403, json={}))
+    cookies = await _auth_cookie()
+    r = await client.get("/api/me/fittings", cookies=cookies)
+    assert r.status_code == 403
+    assert "esi-fittings.read_fittings.v1" in r.json()["detail"]
+
+
+@respx.mock
+async def test_my_fittings_502(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(500, json={}))
+    cookies = await _auth_cookie()
+    r = await client.get("/api/me/fittings", cookies=cookies)
+    assert r.status_code == 502
+
+
+@respx.mock
+async def test_import_fitting_happy_path(client):
+    _fitting_meta_cache.clear()
+    respx.post("https://esi.evetech.net/latest/universe/ids/").mock(
+        return_value=Response(200, json={"inventory_types": [
+            {"id": 587, "name": "Rifter"},
+            {"id": 100, "name": "Damage Control II"}]}))
+    respx.get("https://esi.evetech.net/latest/universe/types/100/").mock(
+        return_value=Response(200, json={"name": "Damage Control II",
+            "group_id": 60, "dogma_effects": [{"effect_id": 11}]}))
+    respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 42}))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/import",
+                          json={"eft": "[Rifter, My Rifter]\nDamage Control II"},
+                          cookies=cookies)
+    assert r.status_code == 200
+    assert r.json()["fitting_id"] == 42
+
+
+async def test_import_fitting_rejects_junk(client):
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/import",
+                          json={"eft": "just some text\nno header"}, cookies=cookies)
+    assert r.status_code == 400
+
+
+@respx.mock
+async def test_delete_fitting_happy_path(client):
+    respx.delete(f"{FITS}/7/").mock(return_value=Response(204))
+    cookies = await _auth_cookie()
+    r = await client.delete("/api/me/fittings/7", cookies=cookies)
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+async def test_delete_fitting_requires_auth(client):
+    r = await client.delete("/api/me/fittings/7")
+    assert r.status_code == 401

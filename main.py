@@ -35,6 +35,8 @@ from esi import (
     set_mail, delete_mail, create_mail_label, delete_mail_label,
     send_mail, resolve_recipient_ids, get_contacts,
     parse_fitting_link, get_fitting_type_meta, build_eft,
+    list_character_fittings, create_character_fitting, delete_character_fitting,
+    eft_from_esi_fitting, parse_eft, eft_to_esi_fitting,
 )
 from db import cache_structure_name
 
@@ -1700,6 +1702,72 @@ async def my_fitting_eft(body: dict, session: str | None = Cookie(None)):
     items = [{**m, "qty": qty} for m, (tid, qty) in zip(metas, pairs)]
     ship_name = ship_info.get("name", f"Type #{ship_id}")
     return {"eft": build_eft(ship_name, fit_name, items), "ship": ship_name}
+
+
+@app.get("/api/me/fittings")
+async def my_fittings(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    token = await get_valid_token(character_id)
+    try:
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403,
+                                detail="Missing scope: esi-fittings.read_fittings.v1")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    ids = {f["ship_type_id"] for f in fits}
+    ids |= {it["type_id"] for f in fits for it in f.get("items", [])}
+    name_map = await resolve_names(list(ids))
+    for f in fits:
+        f["ship_name"] = name_map.get(f["ship_type_id"], f"Type #{f['ship_type_id']}")
+        for it in f.get("items", []):
+            it["name"] = name_map.get(it["type_id"], f"Type #{it['type_id']}")
+        f["eft"] = eft_from_esi_fitting(f, name_map)
+    return {"fittings": fits}
+
+
+@app.post("/api/me/fittings/import")
+async def import_fitting(body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    token = await get_valid_token(character_id)
+    try:
+        parsed = parse_eft(body.get("eft") or "")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Not a valid EFT fit")
+    try:
+        payload = await eft_to_esi_fitting(parsed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    try:
+        created = await create_character_fitting(character_id, token, payload)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403,
+                                detail="Missing scope: esi-fittings.write_fittings.v1")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"fitting_id": created.get("fitting_id"), "name": payload["name"]}
+
+
+@app.delete("/api/me/fittings/{fitting_id}")
+async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    token = await get_valid_token(character_id)
+    try:
+        await delete_character_fitting(character_id, token, fitting_id)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 403:
+            raise HTTPException(status_code=403,
+                                detail="Missing scope: esi-fittings.write_fittings.v1")
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail="ESI unavailable")
+    return {"ok": True}
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────
