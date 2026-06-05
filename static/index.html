@@ -3769,23 +3769,22 @@
 
   async function loadFittings() {
     const grid = document.getElementById('fittings-grid');
-    const err = document.getElementById('fittings-error');
-    err.classList.remove('show'); err.textContent = '';
+    hideError('fittings-error');
     grid.innerHTML = '<div style="color:#66768c;padding:1rem">Loading fittings…</div>';
     try {
       const r = await fetch('/api/me/fittings');
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        err.textContent = d.detail || 'Could not load fittings.';
-        err.classList.add('show'); grid.innerHTML = '';
+        showError('fittings-error', d.detail || 'Could not load fittings.');
+        grid.innerHTML = '';
         return;
       }
       const data = await r.json();
       fittingsData = data.fittings || [];
       renderFittingsList();
     } catch {
-      err.textContent = 'Network error loading fittings.';
-      err.classList.add('show'); grid.innerHTML = '';
+      showError('fittings-error', 'Network error loading fittings.');
+      grid.innerHTML = '';
     }
   }
 
