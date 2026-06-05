@@ -1706,8 +1706,12 @@ async def my_fitting_eft(body: dict, session: str | None = Cookie(None)):
 
 
 def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
-    if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
-        return HTTPException(status_code=403, detail=f"Missing scope: {scope}")
+    if isinstance(e, httpx.HTTPStatusError):
+        print(f"ESI fitting error {e.response.status_code}: {e.response.text[:600]}", flush=True)
+        if e.response.status_code == 403:
+            return HTTPException(status_code=403, detail=f"Missing scope: {scope}")
+    else:
+        print(f"ESI fitting error (no response): {e!r}", flush=True)
     return HTTPException(status_code=502, detail="ESI unavailable")
 
 
@@ -1825,7 +1829,9 @@ async def rename_fitting(fitting_id: int, body: dict, session: str | None = Cook
         raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
     try:
         await delete_character_fitting(character_id, token, fitting_id)
-    except httpx.HTTPError:
+    except httpx.HTTPError as e:
+        body = e.response.text[:600] if isinstance(e, httpx.HTTPStatusError) else repr(e)
+        print(f"ESI fitting rename-delete error: {body}", flush=True)
         raise HTTPException(status_code=502,
                             detail="Renamed copy created, but the original could not be removed")
     return {"fitting_id": created.get("fitting_id"), "name": new_name[:50]}
