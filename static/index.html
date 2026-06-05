@@ -3855,7 +3855,7 @@
       </div>
       <div id="fit-detail-err" class="banner"></div>
       ${sections || '<div style="color:#66768c">No items.</div>'}`;
-    showModal(escHtml(fit.name || 'Fitting'), body);
+    showModal(fit.name || 'Fitting', body);   // showModal sets title via textContent
   }
 
   function exportFitEft(fittingId) {
@@ -3921,7 +3921,7 @@
       <label style="display:block;color:#808fa6;font-size:0.8rem;margin-bottom:0.4rem">
         New fitting name</label>
       <input id="fit-rename-input" type="text" maxlength="50"
-             value="${escHtml(fit.name || '')}"
+             value="${escAttr(fit.name || '')}"
              style="width:100%;padding:0.5rem;background:#0f1117;border:1px solid #2d3348;
                     border-radius:6px;color:#f8fafc">
       <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
@@ -3971,6 +3971,8 @@
         <button class="btn-action" onclick="submitImportFitting(this)">Save Fitting</button>
       </div>`;
     showModal('Import EFT Fitting', body);
+    const ta = document.getElementById('fit-import-text');
+    if (ta) ta.focus();
   }
 
   async function submitImportFitting(btn) {
