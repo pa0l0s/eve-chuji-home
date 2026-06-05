@@ -1719,15 +1719,36 @@ async def my_fittings(session: str | None = Cookie(None)):
         fits = await list_character_fittings(character_id, token)
     except httpx.HTTPError as e:
         raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
-    ids = {f["ship_type_id"] for f in fits}
-    ids |= {it["type_id"] for f in fits for it in f.get("items", [])}
-    name_map = await resolve_type_names(ids)
+    # List stays cheap: resolve only ship names (a small, deduped, cached set).
+    # Per-item names + EFT are resolved lazily by /api/me/fittings/detail when a
+    # fit's popup is opened, so opening the list never fans out to every type.
+    name_map = await resolve_type_names({f["ship_type_id"] for f in fits})
     for f in fits:
         f["ship_name"] = name_map.get(f["ship_type_id"], f"Type #{f['ship_type_id']}")
-        for it in f.get("items", []):
-            it["name"] = name_map.get(it["type_id"], f"Type #{it['type_id']}")
-        f["eft"] = eft_from_esi_fitting(f, name_map)
     return {"fittings": fits}
+
+
+@app.post("/api/me/fittings/detail")
+async def fitting_detail(body: dict, session: str | None = Cookie(None)):
+    """Resolve item names + build EFT for a single fit the client already holds
+    (from the list). Auth-only — no ESI write — and type names come from the
+    cached per-type lookup, so reopening fits that share modules costs nothing."""
+    await get_current_character_id(session)
+    ship_type_id = body.get("ship_type_id")
+    items = body.get("items") or []
+    ids = {it["type_id"] for it in items}
+    if ship_type_id:
+        ids.add(ship_type_id)
+    name_map = await resolve_type_names(ids)
+    enriched = [{**it, "name": name_map.get(it["type_id"], f"Type #{it['type_id']}")}
+                for it in items]
+    fitting = {"name": body.get("name") or "Fitting",
+               "ship_type_id": ship_type_id, "items": items}
+    return {
+        "items": enriched,
+        "eft": eft_from_esi_fitting(fitting, name_map),
+        "ship_name": name_map.get(ship_type_id, f"Type #{ship_type_id}"),
+    }
 
 
 @app.post("/api/me/fittings/import")

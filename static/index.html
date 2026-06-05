@@ -3825,11 +3825,37 @@
     ['drones', 'Drone Bay'], ['cargo', 'Cargo'],
   ];
 
-  function openFitDetail(fittingId) {
+  // Item names + EFT are resolved lazily on open and cached on the fit object
+  // (fit._detail), so reopening a fit makes no further requests.
+  async function openFitDetail(fittingId) {
     const fit = fittingsData.find(f => f.fitting_id === fittingId);
     if (!fit) return;
+    showModal(fit.name || 'Fitting',
+      '<div style="color:#66768c;text-align:center;padding:1.5rem">Loading fit…</div>');
+    if (!fit._detail) {
+      try {
+        const r = await fetch('/api/me/fittings/detail', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ship_type_id: fit.ship_type_id, name: fit.name,
+                                 items: fit.items }) });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          setModalBody('<div class="banner show">' +
+            escHtml(d.detail || 'Could not load fit details.') + '</div>');
+          return;
+        }
+        fit._detail = await r.json();
+      } catch {
+        setModalBody('<div class="banner show">Network error loading fit details.</div>');
+        return;
+      }
+    }
+    setModalBody(fitDetailBody(fit));
+  }
+
+  function fitDetailBody(fit) {
     const groups = {};
-    (fit.items || []).forEach(it => {
+    (fit._detail.items || []).forEach(it => {
       const g = fitSlotOf(it.flag || '');
       (groups[g] = groups[g] || []).push(it);
     });
@@ -3843,7 +3869,7 @@
       return `<div style="margin-bottom:0.9rem">
           <div class="card-title" style="margin-bottom:0.4rem">${label}</div>${rows}</div>`;
     }).join('');
-    const body = `
+    return `
       <div style="display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;
                   margin-bottom:0.75rem">
         <button class="btn-action" onclick="exportFitEft(${fit.fitting_id})">Export EFT</button>
@@ -3855,12 +3881,11 @@
       </div>
       <div id="fit-detail-err" class="banner"></div>
       ${sections || '<div style="color:#66768c">No items.</div>'}`;
-    showModal(fit.name || 'Fitting', body);   // showModal sets title via textContent
   }
 
   function exportFitEft(fittingId) {
     const fit = fittingsData.find(f => f.fitting_id === fittingId);
-    if (fit) renderFittingModal(fit.eft);   // existing helper: EFT <pre> + Copy
+    if (fit && fit._detail) renderFittingModal(fit._detail.eft);  // EFT <pre> + Copy
   }
 
   function confirmDeleteFit(fittingId) {
