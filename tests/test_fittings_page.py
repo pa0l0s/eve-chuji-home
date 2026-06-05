@@ -286,11 +286,12 @@ async def test_my_fittings_403_maps_to_scope(client):
 
 
 @respx.mock
-async def test_my_fittings_502(client):
+async def test_my_fittings_esi_5xx_maps_to_503_retry(client):
     respx.get(f"{FITS}/").mock(return_value=Response(500, json={}))
     cookies = await _auth_cookie()
     r = await client.get("/api/me/fittings", cookies=cookies)
-    assert r.status_code == 502
+    assert r.status_code == 503
+    assert "wait" in r.json()["detail"].lower()
 
 
 @respx.mock
@@ -451,3 +452,75 @@ async def test_rename_fitting_delete_failure_502(client):
 async def test_rename_requires_auth(client):
     r = await client.post("/api/me/fittings/5/rename", json={"name": "X"})
     assert r.status_code == 401
+
+
+# ── Overload error mapping ────────────────────────────────────────────────────
+def _status_err(code):
+    req = __import__("httpx").Request("GET", "http://x")
+    resp = __import__("httpx").Response(code, request=req)
+    return __import__("httpx").HTTPStatusError("x", request=req, response=resp)
+
+
+def test_esi_http_exception_overload_maps_to_503():
+    from main import esi_http_exception
+    exc = esi_http_exception(_status_err(529))
+    assert exc.status_code == 503 and "overloaded" in exc.detail.lower()
+    assert esi_http_exception(_status_err(503)).status_code == 503
+    assert esi_http_exception(_status_err(420)).status_code == 503
+
+
+def test_esi_http_exception_403_scope_and_network():
+    import httpx
+    from main import esi_http_exception
+    exc = esi_http_exception(_status_err(403), scope="esi-fittings.read_fittings.v1")
+    assert exc.status_code == 403 and "esi-fittings.read_fittings.v1" in exc.detail
+    net = esi_http_exception(httpx.ConnectError("boom"))
+    assert net.status_code == 503
+
+
+# ── Write-through overlay (masks ESI's ~5-min list cache) ──────────────────────
+@respx.mock
+async def test_import_then_list_shows_new_fit_via_overlay(client):
+    _fitting_meta_cache.clear()
+    respx.post("https://esi.evetech.net/latest/universe/ids/").mock(return_value=Response(
+        200, json={"inventory_types": [{"id": 587, "name": "Rifter"},
+                                       {"id": 100, "name": "Damage Control II"}]}))
+    respx.get("https://esi.evetech.net/latest/universe/types/100/").mock(return_value=Response(
+        200, json={"name": "Damage Control II", "group_id": 60, "dogma_effects": [{"effect_id": 11}]}))
+    respx.get(f"{TYPES}/587/").mock(return_value=Response(200, json={"name": "Rifter", "group_id": 25}))
+    respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 4242}))
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[]))   # ESI list still STALE
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/import",
+                          json={"eft": "[Rifter, My Rifter]\nDamage Control II"}, cookies=cookies)
+    assert r.status_code == 200 and r.json()["fitting_id"] == 4242
+    r2 = await client.get("/api/me/fittings", cookies=cookies)
+    ids = [f["fitting_id"] for f in r2.json()["fittings"]]
+    assert 4242 in ids                       # overlay surfaces it despite stale ESI
+
+
+@respx.mock
+async def test_delete_then_list_hides_fit_via_overlay(client):
+    respx.delete(f"{FITS}/7").mock(return_value=Response(204))
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[
+        {"fitting_id": 7, "name": "Old", "ship_type_id": 587, "items": []}]))  # ESI still lists 7
+    respx.get(f"{TYPES}/587/").mock(return_value=Response(200, json={"name": "Rifter", "group_id": 25}))
+    cookies = await _auth_cookie()
+    assert (await client.delete("/api/me/fittings/7", cookies=cookies)).status_code == 200
+    r2 = await client.get("/api/me/fittings", cookies=cookies)
+    assert 7 not in [f["fitting_id"] for f in r2.json()["fittings"]]
+
+
+@respx.mock
+async def test_overlay_prunes_once_esi_reflects_delete(client):
+    respx.delete(f"{FITS}/7").mock(return_value=Response(204))
+    # ESI has already caught up (7 is gone) → overlay should self-prune, list works.
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[
+        {"fitting_id": 9, "name": "Other", "ship_type_id": 587, "items": []}]))
+    respx.get(f"{TYPES}/587/").mock(return_value=Response(200, json={"name": "Rifter", "group_id": 25}))
+    cookies = await _auth_cookie()
+    await client.delete("/api/me/fittings/7", cookies=cookies)
+    r2 = await client.get("/api/me/fittings", cookies=cookies)
+    from main import _fit_overlay
+    assert 123 not in _fit_overlay      # overlay cleared for this character
+    assert [f["fitting_id"] for f in r2.json()["fittings"]] == [9]

@@ -973,11 +973,7 @@ async def list_character_fittings(character_id: int, access_token: str) -> list[
         r = await client.get(f"{_FITTINGS_BASE}/{character_id}/fittings/",
                              headers=_fit_headers(access_token))
         r.raise_for_status()
-        data = r.json()
-        print(f"fittings GET: n={len(data)} date={r.headers.get('date')} "
-              f"expires={r.headers.get('expires')} lastmod={r.headers.get('last-modified')}",
-              flush=True)
-        return data
+        return r.json()
 
 
 async def create_character_fitting(character_id: int, access_token: str, fitting: dict) -> dict:
