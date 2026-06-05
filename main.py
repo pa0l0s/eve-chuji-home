@@ -55,6 +55,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+
+@app.middleware("http")
+async def _no_cache_html(request, call_next):
+    """The SPA shell (index.html) must always revalidate, otherwise browsers
+    heuristically cache it and users run stale frontend code after a deploy."""
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 BACKGROUNDS_DIR = os.path.join(os.path.dirname(__file__), "static", "backgrounds")
 _BG_EXTS = (".jpg", ".jpeg", ".png", ".webp")
 
