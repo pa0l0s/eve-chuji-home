@@ -3808,6 +3808,194 @@
       </div>`).join('');
   }
 
+  // ESI fitting item flag -> display group key.
+  function fitSlotOf(flag) {
+    if (flag.startsWith('HiSlot')) return 'high';
+    if (flag.startsWith('MedSlot')) return 'mid';
+    if (flag.startsWith('LoSlot')) return 'low';
+    if (flag.startsWith('RigSlot')) return 'rig';
+    if (flag.startsWith('SubSystemSlot')) return 'subsystem';
+    if (flag === 'DroneBay') return 'drones';
+    return 'cargo';
+  }
+
+  const FIT_GROUP_LABELS = [
+    ['high', 'High Slots'], ['mid', 'Mid Slots'], ['low', 'Low Slots'],
+    ['rig', 'Rigs'], ['subsystem', 'Subsystems'],
+    ['drones', 'Drone Bay'], ['cargo', 'Cargo'],
+  ];
+
+  function openFitDetail(fittingId) {
+    const fit = fittingsData.find(f => f.fitting_id === fittingId);
+    if (!fit) return;
+    const groups = {};
+    (fit.items || []).forEach(it => {
+      const g = fitSlotOf(it.flag || '');
+      (groups[g] = groups[g] || []).push(it);
+    });
+    const sections = FIT_GROUP_LABELS.filter(([k]) => groups[k]).map(([k, label]) => {
+      const rows = groups[k].map(it => `
+        <div style="display:flex;justify-content:space-between;gap:1rem;
+                    padding:0.25rem 0;border-bottom:1px solid #1e2130">
+          <span>${itemName(it.type_id, it.name)}</span>
+          <span style="color:#66768c;flex:none">${it.quantity > 1 ? '×' + it.quantity : ''}</span>
+        </div>`).join('');
+      return `<div style="margin-bottom:0.9rem">
+          <div class="card-title" style="margin-bottom:0.4rem">${label}</div>${rows}</div>`;
+    }).join('');
+    const body = `
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;
+                  margin-bottom:0.75rem">
+        <button class="btn-action" onclick="exportFitEft(${fit.fitting_id})">Export EFT</button>
+        <button class="btn-action" onclick="openRenameFitting(${fit.fitting_id})">Rename</button>
+        <button class="btn-action" id="fit-dup-btn"
+                onclick="duplicateFit(${fit.fitting_id})">Duplicate</button>
+        <button class="btn-action" id="fit-del-btn"
+                onclick="confirmDeleteFit(${fit.fitting_id})">Delete</button>
+      </div>
+      <div id="fit-detail-err" class="banner"></div>
+      ${sections || '<div style="color:#66768c">No items.</div>'}`;
+    showModal(escHtml(fit.name || 'Fitting'), body);
+  }
+
+  function exportFitEft(fittingId) {
+    const fit = fittingsData.find(f => f.fitting_id === fittingId);
+    if (fit) renderFittingModal(fit.eft);   // existing helper: EFT <pre> + Copy
+  }
+
+  function confirmDeleteFit(fittingId) {
+    const btn = document.getElementById('fit-del-btn');
+    if (btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Confirm delete?';
+      btn.style.color = '#f87171';
+      setTimeout(() => {
+        if (btn) { btn.dataset.armed = ''; btn.textContent = 'Delete'; btn.style.color = ''; }
+      }, 3000);
+      return;
+    }
+    doDeleteFit(fittingId);
+  }
+
+  async function doDeleteFit(fittingId) {
+    const err = document.getElementById('fit-detail-err');
+    try {
+      const r = await fetch('/api/me/fittings/' + fittingId, { method: 'DELETE' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        if (err) { err.textContent = d.detail || 'Delete failed.'; err.classList.add('show'); }
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      if (err) { err.textContent = 'Network error.'; err.classList.add('show'); }
+    }
+  }
+
+  async function duplicateFit(fittingId) {
+    const btn = document.getElementById('fit-dup-btn');
+    const err = document.getElementById('fit-detail-err');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch('/api/me/fittings/' + fittingId + '/duplicate', { method: 'POST' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        if (err) { err.textContent = d.detail || 'Duplicate failed.'; err.classList.add('show'); }
+        if (btn) btn.disabled = false;
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      if (err) { err.textContent = 'Network error.'; err.classList.add('show'); }
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function openRenameFitting(fittingId) {
+    const fit = fittingsData.find(f => f.fitting_id === fittingId);
+    if (!fit) return;
+    const body = `
+      <div id="fit-rename-err" class="banner"></div>
+      <label style="display:block;color:#808fa6;font-size:0.8rem;margin-bottom:0.4rem">
+        New fitting name</label>
+      <input id="fit-rename-input" type="text" maxlength="50"
+             value="${escHtml(fit.name || '')}"
+             style="width:100%;padding:0.5rem;background:#0f1117;border:1px solid #2d3348;
+                    border-radius:6px;color:#f8fafc">
+      <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn-action" onclick="submitRenameFitting(this, ${fittingId})">Save</button>
+      </div>`;
+    showModal('Rename Fitting', body);
+    const input = document.getElementById('fit-rename-input');
+    if (input) input.focus();
+  }
+
+  async function submitRenameFitting(btn, fittingId) {
+    const err = document.getElementById('fit-rename-err');
+    const name = (document.getElementById('fit-rename-input') || {}).value || '';
+    err.classList.remove('show'); err.textContent = '';
+    if (!name.trim()) {
+      err.textContent = 'Name required.'; err.classList.add('show');
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/me/fittings/' + fittingId + '/rename', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        err.textContent = d.detail || 'Rename failed.'; err.classList.add('show');
+        btn.disabled = false;
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      err.textContent = 'Network error.'; err.classList.add('show');
+      btn.disabled = false;
+    }
+  }
+
+  function openImportFitting() {
+    const body = `
+      <div id="fit-import-err" class="banner"></div>
+      <p style="color:#808fa6;font-size:0.82rem;margin:0 0 0.5rem">
+        Paste an EFT-format fitting (starts with <code>[Ship, Name]</code>).</p>
+      <textarea id="fit-import-text" class="fit-eft"
+                style="width:100%;height:240px;resize:vertical"
+                placeholder="[Rifter, My Rifter]&#10;Damage Control II&#10;..."></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn-action" onclick="submitImportFitting(this)">Save Fitting</button>
+      </div>`;
+    showModal('Import EFT Fitting', body);
+  }
+
+  async function submitImportFitting(btn) {
+    const err = document.getElementById('fit-import-err');
+    const eft = (document.getElementById('fit-import-text') || {}).value || '';
+    err.classList.remove('show'); err.textContent = '';
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/me/fittings/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eft }) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        err.textContent = d.detail || 'Import failed.'; err.classList.add('show');
+        btn.disabled = false;
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      err.textContent = 'Network error.'; err.classList.add('show');
+      btn.disabled = false;
+    }
+  }
+
   async function fetchSection(url, renderer, errorId) {
     try {
       const r = await fetch(url);
