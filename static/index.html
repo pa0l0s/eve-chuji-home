@@ -964,6 +964,7 @@
       <button class="nav-btn hidden" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-fleet" onclick="showView('fleet')">Fleet</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
+      <button class="nav-btn" id="btn-fittings" onclick="showView('fittings')">Fittings</button>
       <button class="nav-btn hidden" id="btn-admin" onclick="showView('admin')">Admin</button>
     </div>
     <div class="nav-right">
@@ -1085,6 +1086,19 @@
       <div id="member-error" class="banner"></div>
       <div class="page-title">Member Profile</div>
       <div id="member-grid" class="layout"></div>
+    </div>
+
+    <!-- Fittings view -->
+    <div id="view-fittings" class="hidden">
+      <div id="fittings-error" class="banner"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  gap:1rem;max-width:1400px;margin:0 auto 1.5rem auto">
+        <div class="page-title" style="margin:0">My Fittings</div>
+        <button class="btn-action" onclick="openImportFitting()">Import EFT</button>
+      </div>
+      <div id="fittings-grid"
+           style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+                  gap:1rem;max-width:1400px;margin:0 auto"></div>
     </div>
 
     <!-- Mail view -->
@@ -1220,7 +1234,7 @@
 
   function showView(view) {
     currentView = view;
-    ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin', 'mail'].forEach(v => {
+    ['contracts', 'projects', 'structures', 'fleet', 'member', 'fittings', 'admin', 'mail'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
@@ -1234,6 +1248,7 @@
     if (view === 'structures') loadStructures();
     if (view === 'fleet') loadFleet();
     if (view === 'member') loadMember();
+    if (view === 'fittings') loadFittings();
     if (view === 'admin') loadAdmin();
     if (view === 'mail') loadMail();
   }
@@ -3747,6 +3762,51 @@
       if (data) sessionStorage.setItem('me-contracts', JSON.stringify(data));
       renderMemberContracts(data, err);
     }, 'contracts-error');
+  }
+
+  // ── Fittings ────────────────────────────────────────────────────────────────
+  let fittingsData = [];
+
+  async function loadFittings() {
+    const grid = document.getElementById('fittings-grid');
+    const err = document.getElementById('fittings-error');
+    err.classList.remove('show'); err.textContent = '';
+    grid.innerHTML = '<div style="color:#66768c;padding:1rem">Loading fittings…</div>';
+    try {
+      const r = await fetch('/api/me/fittings');
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        err.textContent = d.detail || 'Could not load fittings.';
+        err.classList.add('show'); grid.innerHTML = '';
+        return;
+      }
+      const data = await r.json();
+      fittingsData = data.fittings || [];
+      renderFittingsList();
+    } catch {
+      err.textContent = 'Network error loading fittings.';
+      err.classList.add('show'); grid.innerHTML = '';
+    }
+  }
+
+  function renderFittingsList() {
+    const grid = document.getElementById('fittings-grid');
+    if (!fittingsData.length) {
+      grid.innerHTML = '<div style="color:#66768c;padding:1rem">No fittings found.</div>';
+      return;
+    }
+    grid.innerHTML = fittingsData.map(f => `
+      <div class="card" style="display:flex;gap:0.85rem;align-items:center;cursor:pointer"
+           onclick="openFitDetail(${f.fitting_id})">
+        <img src="https://images.evetech.net/types/${f.ship_type_id}/render?size=64"
+             alt="" width="48" height="48" style="border-radius:6px;flex:none">
+        <div style="min-width:0">
+          <div style="font-weight:600;color:#f8fafc;white-space:nowrap;overflow:hidden;
+                      text-overflow:ellipsis">${escHtml(f.name || 'Fitting')}</div>
+          <div style="font-size:0.8rem;color:#808fa6">${escHtml(f.ship_name || '')}</div>
+          <div style="font-size:0.72rem;color:#66768c">${(f.items || []).length} items</div>
+        </div>
+      </div>`).join('');
   }
 
   async function fetchSection(url, renderer, errorId) {
