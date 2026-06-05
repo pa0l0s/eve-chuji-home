@@ -959,7 +959,8 @@ def build_eft(ship_name: str, fit_name: str, items: list[dict]) -> str:
 
 # ── Character fittings (ESI write API; compatibility-date base, no /latest) ────
 _FITTINGS_BASE = "https://esi.evetech.net/characters"
-_FIT_COMPAT = "2026-01-01"
+# Must be a date published by GET /meta/compatibility-dates/ (ESI rejects others).
+_FIT_COMPAT = "2026-05-19"
 
 
 def _fit_headers(access_token: str) -> dict:
