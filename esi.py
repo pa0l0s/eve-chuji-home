@@ -993,6 +993,27 @@ async def delete_character_fitting(character_id: int, access_token: str, fitting
         r.raise_for_status()
 
 
+async def resolve_type_names(type_ids) -> dict[int, str]:
+    """Resolve many type_ids to {id: name} via the cached per-type lookup.
+
+    Preferred over resolve_names() for item types: the bulk /universe/names/
+    endpoint 404s the WHOLE batch if any single id is unresolvable and is capped
+    at 1000 ids — both of which a large fittings collection trips. get_type_info
+    is DB-cached and per-id, so one bad id degrades only itself. Concurrency is
+    bounded so a cold cache won't flood ESI."""
+    ids = [t for t in {*type_ids} if t]
+    if not ids:
+        return {}
+    sem = asyncio.Semaphore(20)
+
+    async def one(t: int) -> tuple[int, str]:
+        async with sem:
+            info = await get_type_info(t)
+        return t, info.get("name", f"Type #{t}")
+
+    return dict(await asyncio.gather(*(one(t) for t in ids)))
+
+
 def flag_to_slot_kind(flag: str) -> tuple[str | None, str]:
     """Map an ESI fitting item flag to (slot, kind) for build_eft.
     slot ∈ high/mid/low/rig/subsystem/None; kind ∈ module/drone/charge."""

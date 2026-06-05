@@ -29,7 +29,7 @@ from esi import (
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_group_info, get_system_info, get_server_status,
     open_contract_in_client, open_information_in_client, open_market_in_client,
-    resolve_names, resolve_type_ids, get_jita_buy_max,
+    resolve_names, resolve_type_ids, resolve_type_names, get_jita_buy_max,
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
     get_mail_headers, get_mail, get_mail_labels, get_mailing_lists,
     set_mail, delete_mail, create_mail_label, delete_mail_label,
@@ -1721,7 +1721,7 @@ async def my_fittings(session: str | None = Cookie(None)):
         raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
     ids = {f["ship_type_id"] for f in fits}
     ids |= {it["type_id"] for f in fits for it in f.get("items", [])}
-    name_map = await resolve_names(list(ids))
+    name_map = await resolve_type_names(ids)
     for f in fits:
         f["ship_name"] = name_map.get(f["ship_type_id"], f"Type #{f['ship_type_id']}")
         for it in f.get("items", []):

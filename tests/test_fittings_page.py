@@ -222,7 +222,6 @@ async def test_eft_to_esi_fitting_qty_gt_1_module_with_charge():
 # ── Route tests ───────────────────────────────────────────────────────────────
 
 FITS = "https://esi.evetech.net/characters/123/fittings"
-NAMES = "https://esi.evetech.net/latest/universe/names/"
 
 
 async def test_my_fittings_requires_auth(client):
@@ -237,8 +236,12 @@ async def test_my_fittings_happy_path(client):
         "ship_type_id": 587,
         "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}],
     }]))
-    respx.post(NAMES).mock(return_value=Response(200, json=[
-        {"id": 587, "name": "Rifter"}, {"id": 100, "name": "Damage Control II"}]))
+    # Names now resolve per-type via get_type_info (GET /universe/types/{id}/),
+    # not the bulk /universe/names POST.
+    respx.get(f"{TYPES}/587/").mock(return_value=Response(200, json={
+        "name": "Rifter", "group_id": 25}))
+    respx.get(f"{TYPES}/100/").mock(return_value=Response(200, json={
+        "name": "Damage Control II", "group_id": 60}))
     cookies = await _auth_cookie()
     r = await client.get("/api/me/fittings", cookies=cookies)
     assert r.status_code == 200
@@ -246,6 +249,26 @@ async def test_my_fittings_happy_path(client):
     assert fits[0]["ship_name"] == "Rifter"
     assert fits[0]["items"][0]["name"] == "Damage Control II"
     assert fits[0]["eft"].splitlines()[0] == "[Rifter, My Rifter]"
+
+
+@respx.mock
+async def test_my_fittings_resolves_names_despite_one_unresolvable_type(client):
+    # The old bulk /universe/names path 404s the whole batch on one bad id;
+    # per-type resolution must degrade only the bad id, not the rest.
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[{
+        "fitting_id": 1, "name": "F", "description": "", "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"},
+                  {"type_id": 999, "quantity": 1, "flag": "HiSlot0"}],
+    }]))
+    respx.get(f"{TYPES}/587/").mock(return_value=Response(200, json={"name": "Rifter", "group_id": 25}))
+    respx.get(f"{TYPES}/100/").mock(return_value=Response(200, json={"name": "Damage Control II", "group_id": 60}))
+    respx.get(f"{TYPES}/999/").mock(return_value=Response(404, json={}))
+    cookies = await _auth_cookie()
+    r = await client.get("/api/me/fittings", cookies=cookies)
+    assert r.status_code == 200
+    items = {i["type_id"]: i["name"] for i in r.json()["fittings"][0]["items"]}
+    assert items[100] == "Damage Control II"
+    assert items[999] == "Type #999"
 
 
 @respx.mock
