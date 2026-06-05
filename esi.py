@@ -1027,6 +1027,55 @@ def _strip_trailing_qty(s: str) -> tuple[str, int]:
     return s, 1
 
 
+_SLOT_FLAG_PREFIX = {"high": "HiSlot", "mid": "MedSlot", "low": "LoSlot",
+                     "rig": "RigSlot", "subsystem": "SubSystemSlot"}
+_SLOT_MAX = {"high": 8, "mid": 8, "low": 8, "rig": 3, "subsystem": 5}
+
+
+async def eft_to_esi_fitting(parsed: dict) -> dict:
+    """Build an ESI create payload {name, description, ship_type_id, items} from
+    a parse_eft() result. Resolves names → type_ids, derives each module's slot
+    from dogma, and assigns sequential ESI slot flags. Loaded charges get their
+    module's flag; drones → DroneBay; everything else → Cargo. Slot overflow
+    spills to Cargo. Raises ValueError listing any names that cannot be resolved.
+    """
+    names = {parsed["ship_name"]}
+    for ln in parsed["lines"]:
+        names.add(ln["name"])
+        if ln.get("charge"):
+            names.add(ln["charge"])
+    id_map = await resolve_type_ids(list(names))
+    missing = sorted(n for n in names if n not in id_map)
+    if missing:
+        raise ValueError("Could not resolve: " + ", ".join(missing))
+    counters = {k: 0 for k in _SLOT_FLAG_PREFIX}
+    items: list[dict] = []
+    for ln in parsed["lines"]:
+        tid = id_map[ln["name"]]
+        meta = await get_fitting_type_meta(tid)
+        slot, kind = meta["slot"], meta["kind"]
+        qty = ln.get("qty", 1)
+        if kind == "module" and slot in _SLOT_FLAG_PREFIX:
+            last_flag = None
+            for _ in range(qty):
+                idx = counters[slot]
+                if idx >= _SLOT_MAX[slot]:
+                    items.append({"type_id": tid, "quantity": 1, "flag": "Cargo"})
+                    continue
+                last_flag = f"{_SLOT_FLAG_PREFIX[slot]}{idx}"
+                counters[slot] += 1
+                items.append({"type_id": tid, "quantity": 1, "flag": last_flag})
+            if ln.get("charge") and last_flag:
+                items.append({"type_id": id_map[ln["charge"]],
+                              "quantity": 1, "flag": last_flag})
+        elif kind == "drone":
+            items.append({"type_id": tid, "quantity": qty, "flag": "DroneBay"})
+        else:
+            items.append({"type_id": tid, "quantity": qty, "flag": "Cargo"})
+    return {"name": parsed["fit_name"], "description": "",
+            "ship_type_id": id_map[parsed["ship_name"]], "items": items}
+
+
 def parse_eft(text: str) -> dict:
     """Parse EFT text into {ship_name, fit_name, lines:[{name, charge, qty}]}.
 

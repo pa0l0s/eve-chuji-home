@@ -3,7 +3,7 @@ import respx
 from httpx import Response
 
 from esi import (
-    flag_to_slot_kind, eft_from_esi_fitting, parse_eft,
+    flag_to_slot_kind, eft_from_esi_fitting, parse_eft, eft_to_esi_fitting,
     list_character_fittings, create_character_fitting, delete_character_fitting,
     _fitting_meta_cache,
 )
@@ -127,3 +127,62 @@ def test_parse_eft_handles_crlf():
     p = parse_eft("[Rifter, X]\r\nDamage Control II\r\n")
     assert p["ship_name"] == "Rifter"
     assert [l["name"] for l in p["lines"]] == ["Damage Control II"]
+
+
+IDS = "https://esi.evetech.net/latest/universe/ids/"
+TYPES = "https://esi.evetech.net/latest/universe/types"
+
+
+@respx.mock
+async def test_eft_to_esi_fitting_assigns_flags_and_charge():
+    _fitting_meta_cache.clear()
+    respx.post(IDS).mock(return_value=Response(200, json={"inventory_types": [
+        {"id": 587, "name": "Rifter"},
+        {"id": 100, "name": "Damage Control II"},
+        {"id": 200, "name": "200mm AutoCannon II"},
+        {"id": 210, "name": "EMP S"},
+        {"id": 300, "name": "Hobgoblin II"},
+    ]}))
+    # Damage Control II -> low module
+    respx.get(f"{TYPES}/100/").mock(return_value=Response(200, json={
+        "name": "Damage Control II", "group_id": 60,
+        "dogma_effects": [{"effect_id": 11}]}))
+    # 200mm AutoCannon II -> high module
+    respx.get(f"{TYPES}/200/").mock(return_value=Response(200, json={
+        "name": "200mm AutoCannon II", "group_id": 55,
+        "dogma_effects": [{"effect_id": 12}]}))
+    # EMP S -> charge (no slot dogma, not a drone group)
+    respx.get(f"{TYPES}/210/").mock(return_value=Response(200, json={
+        "name": "EMP S", "group_id": 83, "dogma_effects": []}))
+    respx.get("https://esi.evetech.net/latest/universe/groups/83/").mock(
+        return_value=Response(200, json={"category_id": 8}))
+    # Hobgoblin II -> drone
+    respx.get(f"{TYPES}/300/").mock(return_value=Response(200, json={
+        "name": "Hobgoblin II", "group_id": 100, "dogma_effects": []}))
+    respx.get("https://esi.evetech.net/latest/universe/groups/100/").mock(
+        return_value=Response(200, json={"category_id": 18}))
+
+    parsed = {"ship_name": "Rifter", "fit_name": "My Rifter", "lines": [
+        {"name": "Damage Control II", "charge": None, "qty": 1},
+        {"name": "200mm AutoCannon II", "charge": "EMP S", "qty": 1},
+        {"name": "Hobgoblin II", "charge": None, "qty": 5},
+    ]}
+    payload = await eft_to_esi_fitting(parsed)
+    assert payload["ship_type_id"] == 587
+    assert payload["name"] == "My Rifter"
+    flags = {(i["type_id"], i["flag"], i["quantity"]) for i in payload["items"]}
+    assert (100, "LoSlot0", 1) in flags
+    assert (200, "HiSlot0", 1) in flags
+    assert (210, "HiSlot0", 1) in flags     # charge inherits the module's flag
+    assert (300, "DroneBay", 5) in flags
+
+
+@respx.mock
+async def test_eft_to_esi_fitting_unresolved_name_raises():
+    respx.post(IDS).mock(return_value=Response(200, json={"inventory_types": [
+        {"id": 587, "name": "Rifter"}]}))
+    parsed = {"ship_name": "Rifter", "fit_name": "X", "lines": [
+        {"name": "Nonexistent Module", "charge": None, "qty": 1}]}
+    with pytest.raises(ValueError) as exc:
+        await eft_to_esi_fitting(parsed)
+    assert "Nonexistent Module" in str(exc.value)
