@@ -308,3 +308,87 @@ async def test_delete_fitting_requires_auth(client):
 async def test_import_fitting_requires_auth(client):
     r = await client.post("/api/me/fittings/import", json={"eft": "[Rifter, X]"})
     assert r.status_code == 401
+
+
+from esi import fitting_to_create_payload, next_copy_name
+
+
+def test_next_copy_name_first_copy():
+    assert next_copy_name("Rifter", set()) == "Rifter copy"
+    assert next_copy_name("Rifter", {"Rifter"}) == "Rifter copy"
+
+
+def test_next_copy_name_increments():
+    assert next_copy_name("Rifter", {"Rifter copy"}) == "Rifter copy2"
+    assert next_copy_name("Rifter", {"Rifter copy", "Rifter copy2"}) == "Rifter copy3"
+
+
+def test_next_copy_name_caps_50_chars():
+    base = "x" * 60
+    assert len(next_copy_name(base, set())) == 50
+
+
+def test_fitting_to_create_payload_copies_items_only():
+    fit = {
+        "fitting_id": 9, "name": "Orig", "ship_name": "Rifter", "eft": "...",
+        "description": "<p>d</p>", "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 2, "flag": "LoSlot0", "name": "DCU II"}],
+    }
+    p = fitting_to_create_payload(fit, "New Name")
+    assert p == {
+        "name": "New Name", "description": "<p>d</p>", "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 2, "flag": "LoSlot0"}],
+    }
+
+
+@respx.mock
+async def test_duplicate_fitting_happy_path(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[{
+        "fitting_id": 5, "name": "Rifter", "description": "", "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}],
+    }]))
+    create = respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 88}))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/5/duplicate", cookies=cookies)
+    assert r.status_code == 200
+    assert r.json() == {"fitting_id": 88, "name": "Rifter copy"}
+    import json as _json
+    sent = _json.loads(create.calls.last.request.content)
+    assert sent["name"] == "Rifter copy"
+    assert sent["ship_type_id"] == 587
+    assert sent["items"] == [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}]
+
+
+@respx.mock
+async def test_duplicate_fitting_unknown_id_404(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[]))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/999/duplicate", cookies=cookies)
+    assert r.status_code == 404
+
+
+@respx.mock
+async def test_rename_fitting_happy_path(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[{
+        "fitting_id": 5, "name": "Rifter", "description": "", "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}],
+    }]))
+    create = respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 90}))
+    delete = respx.delete(f"{FITS}/5/").mock(return_value=Response(204))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/5/rename",
+                          json={"name": "Better Rifter"}, cookies=cookies)
+    assert r.status_code == 200
+    assert r.json() == {"fitting_id": 90, "name": "Better Rifter"}
+    assert create.called and delete.called
+
+
+async def test_rename_fitting_empty_name_400(client):
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/5/rename", json={"name": "  "}, cookies=cookies)
+    assert r.status_code == 400
+
+
+async def test_duplicate_requires_auth(client):
+    r = await client.post("/api/me/fittings/5/duplicate")
+    assert r.status_code == 401

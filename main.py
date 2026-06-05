@@ -37,6 +37,7 @@ from esi import (
     parse_fitting_link, get_fitting_type_meta, build_eft,
     list_character_fittings, create_character_fitting, delete_character_fitting,
     eft_from_esi_fitting, parse_eft, eft_to_esi_fitting,
+    fitting_to_create_payload, next_copy_name,
 )
 from db import cache_structure_name
 
@@ -1768,6 +1769,60 @@ async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="ESI unavailable")
     return {"ok": True}
+
+
+def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
+    if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
+        return HTTPException(status_code=403, detail=f"Missing scope: {scope}")
+    return HTTPException(status_code=502, detail="ESI unavailable")
+
+
+@app.post("/api/me/fittings/{fitting_id}/duplicate")
+async def duplicate_fitting(fitting_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        token = await get_valid_token(character_id)
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    src = next((f for f in fits if f["fitting_id"] == fitting_id), None)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Fitting not found")
+    name = next_copy_name(src.get("name") or "Fitting", {f.get("name") for f in fits})
+    try:
+        created = await create_character_fitting(
+            character_id, token, fitting_to_create_payload(src, name))
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    return {"fitting_id": created.get("fitting_id"), "name": name}
+
+
+@app.post("/api/me/fittings/{fitting_id}/rename")
+async def rename_fitting(fitting_id: int, body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Name required")
+    try:
+        token = await get_valid_token(character_id)
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    src = next((f for f in fits if f["fitting_id"] == fitting_id), None)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Fitting not found")
+    # Create the renamed copy FIRST; only delete the original once it exists.
+    try:
+        created = await create_character_fitting(
+            character_id, token, fitting_to_create_payload(src, new_name))
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    try:
+        await delete_character_fitting(character_id, token, fitting_id)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502,
+                            detail="Renamed copy created, but the original could not be removed")
+    return {"fitting_id": created.get("fitting_id"), "name": new_name}
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────

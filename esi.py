@@ -1076,6 +1076,29 @@ async def eft_to_esi_fitting(parsed: dict) -> dict:
             "ship_type_id": id_map[parsed["ship_name"]], "items": items}
 
 
+def fitting_to_create_payload(fit: dict, name: str) -> dict:
+    """Build an ESI create payload that clones `fit` under a new name (<=50 chars).
+    Copies only the ESI item fields, ignoring any enrichment (ship_name/eft/name)."""
+    return {
+        "name": name[:50],
+        "description": fit.get("description") or "",
+        "ship_type_id": fit["ship_type_id"],
+        "items": [{"type_id": it["type_id"], "quantity": it["quantity"], "flag": it["flag"]}
+                  for it in fit.get("items", [])],
+    }
+
+
+def next_copy_name(base: str, existing: set[str]) -> str:
+    """'{base} copy', else '{base} copy2', 'copy3', ... avoiding `existing`. <=50 chars."""
+    candidate = f"{base} copy"
+    if candidate not in existing:
+        return candidate[:50]
+    n = 2
+    while f"{base} copy{n}" in existing:
+        n += 1
+    return f"{base} copy{n}"[:50]
+
+
 def parse_eft(text: str) -> dict:
     """Parse EFT text into {ship_name, fit_name, lines:[{name, charge, qty}]}.
 
