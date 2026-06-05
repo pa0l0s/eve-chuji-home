@@ -1096,9 +1096,27 @@
         <div class="page-title" style="margin:0">My Fittings</div>
         <button class="btn-action" onclick="openImportFitting()">Import EFT</button>
       </div>
+      <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;
+                  max-width:1400px;margin:0 auto 1rem auto">
+        <input id="fittings-search" type="text" placeholder="Search fits or ships…"
+               oninput="setFitFilter(this.value)" autocomplete="off"
+               style="flex:1;min-width:180px;max-width:340px;padding:0.45rem 0.6rem;
+                      background:#0f1117;border:1px solid #2d3348;border-radius:6px;color:#f8fafc">
+        <span style="color:#66768c;font-size:0.8rem">Sort</span>
+        <button class="proj-sort-btn" id="fit-sort-name" onclick="setFitSort('name')">Name</button>
+        <button class="proj-sort-btn" id="fit-sort-ship" onclick="setFitSort('ship')">Ship</button>
+        <span id="fittings-count" style="margin-left:auto;color:#66768c;font-size:0.8rem"></span>
+      </div>
       <div id="fittings-grid"
            style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
                   gap:1rem;max-width:1400px;margin:0 auto"></div>
+      <div id="fittings-pager"
+           style="display:none;gap:0.75rem;align-items:center;justify-content:center;
+                  max-width:1400px;margin:1.25rem auto 0 auto">
+        <button class="btn-action" onclick="fitPagePrev()">Prev</button>
+        <span id="fittings-pageinfo" style="color:#808fa6;font-size:0.85rem"></span>
+        <button class="btn-action" onclick="fitPageNext()">Next</button>
+      </div>
     </div>
 
     <!-- Mail view -->
@@ -3766,6 +3784,30 @@
 
   // ── Fittings ────────────────────────────────────────────────────────────────
   let fittingsData = [];
+  let fitFilter = '';
+  let fitSort = { key: 'name', dir: 1 };   // key: name|ship; dir: 1 asc / -1 desc
+  let fitPage = 0;
+  const FIT_PAGE_SIZE = 24;
+
+  function setFitFilter(v) { fitFilter = v.trim().toLowerCase(); fitPage = 0; renderFittingsList(); }
+  function setFitSort(key) {
+    if (fitSort.key === key) fitSort.dir *= -1; else fitSort = { key, dir: 1 };
+    fitPage = 0; renderFittingsList();
+  }
+  function fitPagePrev() { if (fitPage > 0) { fitPage--; renderFittingsList(); } }
+  function fitPageNext() { fitPage++; renderFittingsList(); }   // clamped in render
+
+  function fittingsView() {
+    let arr = fittingsData;
+    if (fitFilter) {
+      arr = arr.filter(f =>
+        (f.name || '').toLowerCase().includes(fitFilter) ||
+        (f.ship_name || '').toLowerCase().includes(fitFilter));
+    }
+    const key = fitSort.key === 'ship' ? 'ship_name' : 'name';
+    return arr.slice().sort((a, b) => fitSort.dir *
+      String(a[key] || '').localeCompare(String(b[key] || ''), undefined, { sensitivity: 'base' }));
+  }
 
   async function loadFittings() {
     const grid = document.getElementById('fittings-grid');
@@ -3790,11 +3832,36 @@
 
   function renderFittingsList() {
     const grid = document.getElementById('fittings-grid');
+    const view = fittingsView();
+    const total = view.length;
+    const pages = Math.max(1, Math.ceil(total / FIT_PAGE_SIZE));
+    fitPage = Math.min(Math.max(fitPage, 0), pages - 1);
+    const pageItems = view.slice(fitPage * FIT_PAGE_SIZE, fitPage * FIT_PAGE_SIZE + FIT_PAGE_SIZE);
+
+    const labels = { name: 'Name', ship: 'Ship' };
+    ['name', 'ship'].forEach(k => {
+      const b = document.getElementById('fit-sort-' + k);
+      if (!b) return;
+      b.classList.toggle('active', fitSort.key === k);
+      b.textContent = labels[k] + (fitSort.key === k ? (fitSort.dir === 1 ? ' ▲' : ' ▼') : '');
+    });
+    const countEl = document.getElementById('fittings-count');
+    if (countEl) countEl.textContent =
+      total + (total === 1 ? ' fit' : ' fits') + (fitFilter ? ' (filtered)' : '');
+    const pager = document.getElementById('fittings-pager');
+    const pageInfo = document.getElementById('fittings-pageinfo');
+    if (pageInfo) pageInfo.textContent = total ? `Page ${fitPage + 1} of ${pages}` : '';
+    if (pager) pager.style.display = total > FIT_PAGE_SIZE ? 'flex' : 'none';
+
     if (!fittingsData.length) {
       grid.innerHTML = '<div style="color:#66768c;padding:1rem">No fittings found.</div>';
       return;
     }
-    grid.innerHTML = fittingsData.map(f => `
+    if (!total) {
+      grid.innerHTML = '<div style="color:#66768c;padding:1rem">No fits match your search.</div>';
+      return;
+    }
+    grid.innerHTML = pageItems.map(f => `
       <div class="card" style="display:flex;gap:0.85rem;align-items:center;cursor:pointer"
            onclick="openFitDetail(${f.fitting_id})">
         <img src="https://images.evetech.net/types/${f.ship_type_id}/render?size=64"
