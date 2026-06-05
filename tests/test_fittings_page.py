@@ -186,3 +186,34 @@ async def test_eft_to_esi_fitting_unresolved_name_raises():
     with pytest.raises(ValueError) as exc:
         await eft_to_esi_fitting(parsed)
     assert "Nonexistent Module" in str(exc.value)
+
+
+@respx.mock
+async def test_eft_to_esi_fitting_qty_gt_1_module_with_charge():
+    """A qty>1 module emits one item per unit with sequential flags, and an
+    inline charge inherits the LAST assigned slot flag."""
+    _fitting_meta_cache.clear()
+    respx.post(IDS).mock(return_value=Response(200, json={"inventory_types": [
+        {"id": 587, "name": "Rifter"},
+        {"id": 200, "name": "200mm AutoCannon II"},
+        {"id": 210, "name": "EMP S"},
+    ]}))
+    respx.get(f"{TYPES}/200/").mock(return_value=Response(200, json={
+        "name": "200mm AutoCannon II", "group_id": 55,
+        "dogma_effects": [{"effect_id": 12}]}))      # high slot
+    respx.get(f"{TYPES}/210/").mock(return_value=Response(200, json={
+        "name": "EMP S", "group_id": 83, "dogma_effects": []}))
+    respx.get("https://esi.evetech.net/latest/universe/groups/83/").mock(
+        return_value=Response(200, json={"category_id": 8}))   # charge, not drone
+
+    parsed = {"ship_name": "Rifter", "fit_name": "X", "lines": [
+        {"name": "200mm AutoCannon II", "charge": "EMP S", "qty": 2},
+    ]}
+    payload = await eft_to_esi_fitting(parsed)
+    items = payload["items"]
+    # two module units in consecutive high slots
+    assert {"type_id": 200, "quantity": 1, "flag": "HiSlot0"} in items
+    assert {"type_id": 200, "quantity": 1, "flag": "HiSlot1"} in items
+    # one charge, inheriting the LAST module flag
+    charges = [i for i in items if i["type_id"] == 210]
+    assert charges == [{"type_id": 210, "quantity": 1, "flag": "HiSlot1"}]
