@@ -1736,10 +1736,6 @@ def esi_http_exception(e: httpx.HTTPError, scope: str | None = None) -> HTTPExce
 
 
 def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
-    if isinstance(e, httpx.HTTPStatusError):
-        print(f"ESI fitting error {e.response.status_code}: {e.response.text[:600]}", flush=True)
-    else:
-        print(f"ESI fitting error (no response): {e!r}", flush=True)
     return esi_http_exception(e, scope)
 
 
@@ -1919,9 +1915,7 @@ async def rename_fitting(fitting_id: int, body: dict, session: str | None = Cook
     _overlay_add(character_id, {**payload, "fitting_id": new_id})
     try:
         await delete_character_fitting(character_id, token, fitting_id)
-    except httpx.HTTPError as e:
-        body = e.response.text[:600] if isinstance(e, httpx.HTTPStatusError) else repr(e)
-        print(f"ESI fitting rename-delete error: {body}", flush=True)
+    except httpx.HTTPError:
         raise HTTPException(status_code=502,
                             detail="Renamed copy created, but the original could not be removed")
     _overlay_remove(character_id, fitting_id)
