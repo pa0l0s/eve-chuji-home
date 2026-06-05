@@ -1089,14 +1089,18 @@ def fitting_to_create_payload(fit: dict, name: str) -> dict:
 
 
 def next_copy_name(base: str, existing: set[str]) -> str:
-    """'{base} copy', else '{base} copy2', 'copy3', ... avoiding `existing`. <=50 chars."""
-    candidate = f"{base} copy"
+    """'{base} copy', else '{base} copy2', '{base} copy3', ... avoiding `existing`. <=50 chars."""
+    suffix = " copy"
+    candidate = (base[:50 - len(suffix)] + suffix)[:50]
     if candidate not in existing:
-        return candidate[:50]
+        return candidate
     n = 2
-    while f"{base} copy{n}" in existing:
+    while True:
+        suffix_n = f" copy{n}"
+        candidate = base[:50 - len(suffix_n)] + suffix_n
+        if candidate not in existing:
+            return candidate
         n += 1
-    return f"{base} copy{n}"[:50]
 
 
 def parse_eft(text: str) -> dict:

@@ -5,7 +5,7 @@ from httpx import Response
 from esi import (
     flag_to_slot_kind, eft_from_esi_fitting, parse_eft, eft_to_esi_fitting,
     list_character_fittings, create_character_fitting, delete_character_fitting,
-    _fitting_meta_cache,
+    _fitting_meta_cache, fitting_to_create_payload, next_copy_name,
 )
 from db import init_db, upsert_token
 from auth import make_session_cookie
@@ -310,9 +310,6 @@ async def test_import_fitting_requires_auth(client):
     assert r.status_code == 401
 
 
-from esi import fitting_to_create_payload, next_copy_name
-
-
 def test_next_copy_name_first_copy():
     assert next_copy_name("Rifter", set()) == "Rifter copy"
     assert next_copy_name("Rifter", {"Rifter"}) == "Rifter copy"
@@ -391,4 +388,38 @@ async def test_rename_fitting_empty_name_400(client):
 
 async def test_duplicate_requires_auth(client):
     r = await client.post("/api/me/fittings/5/duplicate")
+    assert r.status_code == 401
+
+
+def test_next_copy_name_increments_when_truncated_copy_exists():
+    base = "x" * 48
+    first = next_copy_name(base, set())          # capped to 50
+    second = next_copy_name(base, {first})       # must differ and stay <=50
+    assert second != first
+    assert len(second) <= 50
+
+
+@respx.mock
+async def test_rename_fitting_unknown_id_404(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[]))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/999/rename", json={"name": "X"}, cookies=cookies)
+    assert r.status_code == 404
+
+
+@respx.mock
+async def test_rename_fitting_delete_failure_502(client):
+    respx.get(f"{FITS}/").mock(return_value=Response(200, json=[{
+        "fitting_id": 5, "name": "Rifter", "description": "", "ship_type_id": 587,
+        "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}]}]))
+    respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 90}))
+    respx.delete(f"{FITS}/5/").mock(return_value=Response(500, json={}))
+    cookies = await _auth_cookie()
+    r = await client.post("/api/me/fittings/5/rename", json={"name": "New"}, cookies=cookies)
+    assert r.status_code == 502
+    assert "could not be removed" in r.json()["detail"]
+
+
+async def test_rename_requires_auth(client):
+    r = await client.post("/api/me/fittings/5/rename", json={"name": "X"})
     assert r.status_code == 401

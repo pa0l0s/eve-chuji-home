@@ -1705,19 +1705,20 @@ async def my_fitting_eft(body: dict, session: str | None = Cookie(None)):
     return {"eft": build_eft(ship_name, fit_name, items), "ship": ship_name}
 
 
+def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
+    if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
+        return HTTPException(status_code=403, detail=f"Missing scope: {scope}")
+    return HTTPException(status_code=502, detail="ESI unavailable")
+
+
 @app.get("/api/me/fittings")
 async def my_fittings(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
     try:
         token = await get_valid_token(character_id)
         fits = await list_character_fittings(character_id, token)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 403:
-            raise HTTPException(status_code=403,
-                                detail="Missing scope: esi-fittings.read_fittings.v1")
-        raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
     ids = {f["ship_type_id"] for f in fits}
     ids |= {it["type_id"] for f in fits for it in f.get("items", [])}
     name_map = await resolve_names(list(ids))
@@ -1745,13 +1746,8 @@ async def import_fitting(body: dict, session: str | None = Cookie(None)):
     try:
         token = await get_valid_token(character_id)
         created = await create_character_fitting(character_id, token, payload)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 403:
-            raise HTTPException(status_code=403,
-                                detail="Missing scope: esi-fittings.write_fittings.v1")
-        raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
     return {"fitting_id": created.get("fitting_id"), "name": payload["name"]}
 
 
@@ -1761,20 +1757,9 @@ async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
     try:
         token = await get_valid_token(character_id)
         await delete_character_fitting(character_id, token, fitting_id)
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 403:
-            raise HTTPException(status_code=403,
-                                detail="Missing scope: esi-fittings.write_fittings.v1")
-        raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
     return {"ok": True}
-
-
-def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
-    if isinstance(e, httpx.HTTPStatusError) and e.response.status_code == 403:
-        return HTTPException(status_code=403, detail=f"Missing scope: {scope}")
-    return HTTPException(status_code=502, detail="ESI unavailable")
 
 
 @app.post("/api/me/fittings/{fitting_id}/duplicate")
@@ -1822,7 +1807,7 @@ async def rename_fitting(fitting_id: int, body: dict, session: str | None = Cook
     except httpx.HTTPError:
         raise HTTPException(status_code=502,
                             detail="Renamed copy created, but the original could not be removed")
-    return {"fitting_id": created.get("fitting_id"), "name": new_name}
+    return {"fitting_id": created.get("fitting_id"), "name": new_name[:50]}
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────
