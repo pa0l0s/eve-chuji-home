@@ -1,6 +1,7 @@
 import ast
 import os
 import asyncio
+import re
 import time
 import base64
 import httpx
@@ -954,3 +955,220 @@ def build_eft(ship_name: str, fit_name: str, items: list[dict]) -> str:
     body = "\n\n".join(sections)
     header = f"[{ship_name}, {fit_name}]"
     return f"{header}\n{body}" if body else header
+
+
+# ── Character fittings (ESI write API; compatibility-date base, no /latest) ────
+_FITTINGS_BASE = "https://esi.evetech.net/characters"
+# Must be a date published by GET /meta/compatibility-dates/ (ESI rejects others).
+_FIT_COMPAT = "2026-05-19"
+
+
+def _fit_headers(access_token: str) -> dict:
+    return {"Authorization": f"Bearer {access_token}", "X-Compatibility-Date": _FIT_COMPAT}
+
+
+async def list_character_fittings(character_id: int, access_token: str) -> list[dict]:
+    """GET the character's saved fittings (raw ESI list)."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{_FITTINGS_BASE}/{character_id}/fittings/",
+                             headers=_fit_headers(access_token))
+        r.raise_for_status()
+        return r.json()
+
+
+async def create_character_fitting(character_id: int, access_token: str, fitting: dict) -> dict:
+    """POST a new fitting; returns {'fitting_id': int}."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(f"{_FITTINGS_BASE}/{character_id}/fittings/",
+                              json=fitting, headers=_fit_headers(access_token))
+        r.raise_for_status()
+        return r.json()
+
+
+async def delete_character_fitting(character_id: int, access_token: str, fitting_id: int) -> None:
+    """DELETE one saved fitting. No trailing slash — ESI's DELETE route 500s with one."""
+    async with httpx.AsyncClient() as client:
+        r = await client.delete(f"{_FITTINGS_BASE}/{character_id}/fittings/{fitting_id}",
+                               headers=_fit_headers(access_token))
+        r.raise_for_status()
+
+
+async def resolve_type_names(type_ids) -> dict[int, str]:
+    """Resolve many type_ids to {id: name} via the cached per-type lookup.
+
+    Preferred over resolve_names() for item types: the bulk /universe/names/
+    endpoint 404s the WHOLE batch if any single id is unresolvable and is capped
+    at 1000 ids — both of which a large fittings collection trips. get_type_info
+    is DB-cached and per-id, so one bad id degrades only itself. Concurrency is
+    bounded so a cold cache won't flood ESI."""
+    ids = [t for t in {*type_ids} if t]
+    if not ids:
+        return {}
+    sem = asyncio.Semaphore(20)
+
+    async def one(t: int) -> tuple[int, str]:
+        async with sem:
+            info = await get_type_info(t)
+        return t, info.get("name", f"Type #{t}")
+
+    return dict(await asyncio.gather(*(one(t) for t in ids)))
+
+
+def flag_to_slot_kind(flag: str) -> tuple[str | None, str]:
+    """Map an ESI fitting item flag to (slot, kind) for build_eft.
+    slot ∈ high/mid/low/rig/subsystem/None; kind ∈ module/drone/charge."""
+    if flag.startswith("HiSlot"):        return ("high", "module")
+    if flag.startswith("MedSlot"):       return ("mid", "module")
+    if flag.startswith("LoSlot"):        return ("low", "module")
+    if flag.startswith("RigSlot"):       return ("rig", "module")
+    if flag.startswith("SubSystemSlot"): return ("subsystem", "module")
+    if flag == "DroneBay":               return (None, "drone")
+    return (None, "charge")              # Cargo / FighterBay / anything else
+
+
+def eft_from_esi_fitting(fitting: dict, name_map: dict[int, str]) -> str:
+    """Render an ESI fitting dict to EFT text. name_map: type_id -> name
+    (must cover the ship and every item; missing ids degrade to 'Type #<id>')."""
+    items = []
+    for it in fitting.get("items", []):
+        slot, kind = flag_to_slot_kind(it.get("flag", ""))
+        items.append({
+            "name": name_map.get(it["type_id"], f"Type #{it['type_id']}"),
+            "slot": slot, "kind": kind, "qty": it.get("quantity", 1),
+        })
+    ship_id = fitting["ship_type_id"]
+    ship_name = name_map.get(ship_id, f"Type #{ship_id}")
+    return build_eft(ship_name, fitting.get("name", "Fitting"), items)
+
+
+def _strip_trailing_qty(s: str) -> tuple[str, int]:
+    """Split a trailing ' xN' quantity off an EFT line. Returns (name, qty>=1)."""
+    m = re.search(r"\sx(\d+)$", s)
+    if m:
+        return s[:m.start()].strip(), max(1, int(m.group(1)))
+    return s, 1
+
+
+_SLOT_FLAG_PREFIX = {"high": "HiSlot", "mid": "MedSlot", "low": "LoSlot",
+                     "rig": "RigSlot", "subsystem": "SubSystemSlot"}
+_SLOT_MAX = {"high": 8, "mid": 8, "low": 8, "rig": 3, "subsystem": 5}
+
+
+async def eft_to_esi_fitting(parsed: dict) -> dict:
+    """Build an ESI create payload {name, description, ship_type_id, items} from
+    a parse_eft() result. Resolves names → type_ids, derives each module's slot
+    from dogma, and assigns sequential ESI slot flags. Loaded charges get their
+    module's flag; drones → DroneBay; everything else → Cargo. Slot overflow
+    spills to Cargo. Raises ValueError listing any names that cannot be resolved.
+    """
+    names = {parsed["ship_name"]}
+    for ln in parsed["lines"]:
+        names.add(ln["name"])
+        if ln.get("charge"):
+            names.add(ln["charge"])
+    id_map = await resolve_type_ids(list(names))
+    missing = sorted(n for n in names if n not in id_map)
+    if missing:
+        raise ValueError("Could not resolve: " + ", ".join(missing))
+    counters = {k: 0 for k in _SLOT_FLAG_PREFIX}
+    items: list[dict] = []
+    for ln in parsed["lines"]:
+        tid = id_map[ln["name"]]
+        meta = await get_fitting_type_meta(tid)
+        slot, kind = meta["slot"], meta["kind"]
+        qty = ln.get("qty", 1)
+        if kind == "module" and slot in _SLOT_FLAG_PREFIX:
+            last_flag = None
+            for _ in range(qty):
+                idx = counters[slot]
+                if idx >= _SLOT_MAX[slot]:
+                    items.append({"type_id": tid, "quantity": 1, "flag": "Cargo"})
+                    continue
+                last_flag = f"{_SLOT_FLAG_PREFIX[slot]}{idx}"
+                counters[slot] += 1
+                items.append({"type_id": tid, "quantity": 1, "flag": last_flag})
+            if ln.get("charge") and last_flag:
+                items.append({"type_id": id_map[ln["charge"]],
+                              "quantity": 1, "flag": last_flag})
+        elif kind == "drone":
+            items.append({"type_id": tid, "quantity": qty, "flag": "DroneBay"})
+        else:
+            items.append({"type_id": tid, "quantity": qty, "flag": "Cargo"})
+    return {"name": parsed["fit_name"], "description": "",
+            "ship_type_id": id_map[parsed["ship_name"]], "items": items}
+
+
+def fitting_to_create_payload(fit: dict, name: str) -> dict:
+    """Build an ESI create payload that clones `fit` under a new name (<=50 chars).
+    Copies only the ESI item fields, ignoring any enrichment (ship_name/eft/name)."""
+    return {
+        "name": name[:50],
+        "description": fit.get("description") or "",
+        "ship_type_id": fit["ship_type_id"],
+        "items": [{"type_id": it["type_id"], "quantity": it["quantity"], "flag": it["flag"]}
+                  for it in fit.get("items", [])],
+    }
+
+
+def next_copy_name(base: str, existing: set[str]) -> str:
+    """'{base} copy', else '{base} copy2', '{base} copy3', ... avoiding `existing`. <=50 chars."""
+    suffix = " copy"
+    candidate = (base[:50 - len(suffix)] + suffix)[:50]
+    if candidate not in existing:
+        return candidate
+    n = 2
+    while True:
+        suffix_n = f" copy{n}"
+        candidate = base[:50 - len(suffix_n)] + suffix_n
+        if candidate not in existing:
+            return candidate
+        n += 1
+
+
+def parse_eft(text: str) -> dict:
+    """Parse EFT text into {ship_name, fit_name, lines:[{name, charge, qty}]}.
+
+    The first non-empty line must be '[Ship Name, Fit Name]'. Subsequent
+    non-empty lines are modules/drones/cargo; 'Name, Charge' splits an inline
+    loaded charge; a trailing ' xN' sets quantity. Lines beginning with '['
+    after the header (e.g. '[Empty High slot]') and blank lines are ignored —
+    slot is derived later from dogma, not from EFT line position.
+    Raises ValueError if the header is missing or malformed.
+    """
+    lines_in = (text or "").splitlines()
+    header = None
+    body_start = 0
+    for i, raw in enumerate(lines_in):
+        s = raw.strip()
+        if not s:
+            continue
+        if s.startswith("[") and s.endswith("]") and "," in s:
+            header = s
+            body_start = i + 1
+        break  # always stop at the first non-empty line: it's the header or it's invalid
+    if header is None:
+        raise ValueError("Not a valid EFT fit (missing [Ship, Name] header)")
+    ship_name, _, fit_name = header[1:-1].partition(",")
+    ship_name = ship_name.strip()
+    fit_name = fit_name.strip() or "Imported Fit"
+    if not ship_name:
+        raise ValueError("Not a valid EFT fit (missing ship name)")
+    out = []
+    for raw in lines_in[body_start:]:
+        s = raw.strip()
+        if not s or s.startswith("["):
+            continue
+        name_part = s
+        charge = None
+        if "," in s:
+            name_part, _, charge_part = s.partition(",")
+            name_part = name_part.strip()
+            charge_part = charge_part.strip()
+            if charge_part:
+                charge, _ = _strip_trailing_qty(charge_part)  # drop any qty on the charge
+                charge = charge or None
+        name_part, qty = _strip_trailing_qty(name_part)
+        if not name_part:
+            continue
+        out.append({"name": name_part, "charge": charge, "qty": qty})
+    return {"ship_name": ship_name, "fit_name": fit_name, "lines": out}

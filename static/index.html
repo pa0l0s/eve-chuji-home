@@ -964,6 +964,7 @@
       <button class="nav-btn hidden" id="btn-structures" onclick="showView('structures')">Structures</button>
       <button class="nav-btn" id="btn-fleet" onclick="showView('fleet')">Fleet</button>
       <button class="nav-btn" id="btn-member" onclick="showView('member')">Member</button>
+      <button class="nav-btn" id="btn-fittings" onclick="showView('fittings')">Fittings</button>
       <button class="nav-btn hidden" id="btn-admin" onclick="showView('admin')">Admin</button>
     </div>
     <div class="nav-right">
@@ -1085,6 +1086,37 @@
       <div id="member-error" class="banner"></div>
       <div class="page-title">Member Profile</div>
       <div id="member-grid" class="layout"></div>
+    </div>
+
+    <!-- Fittings view -->
+    <div id="view-fittings" class="hidden">
+      <div id="fittings-error" class="banner"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;
+                  gap:1rem;max-width:1400px;margin:0 auto 1.5rem auto">
+        <div class="page-title" style="margin:0">My Fittings</div>
+        <button class="btn-action" onclick="openImportFitting()">Import EFT</button>
+      </div>
+      <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;
+                  max-width:1400px;margin:0 auto 1rem auto">
+        <input id="fittings-search" type="text" placeholder="Search fits or ships…"
+               oninput="setFitFilter(this.value)" autocomplete="off"
+               style="flex:1;min-width:180px;max-width:340px;padding:0.45rem 0.6rem;
+                      background:#0f1117;border:1px solid #2d3348;border-radius:6px;color:#f8fafc">
+        <span style="color:#66768c;font-size:0.8rem">Sort</span>
+        <button class="proj-sort-btn" id="fit-sort-name" onclick="setFitSort('name')">Name</button>
+        <button class="proj-sort-btn" id="fit-sort-ship" onclick="setFitSort('ship')">Ship</button>
+        <span id="fittings-count" style="margin-left:auto;color:#66768c;font-size:0.8rem"></span>
+      </div>
+      <div id="fittings-grid"
+           style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+                  gap:1rem;max-width:1400px;margin:0 auto"></div>
+      <div id="fittings-pager"
+           style="display:none;gap:0.75rem;align-items:center;justify-content:center;
+                  max-width:1400px;margin:1.25rem auto 0 auto">
+        <button class="btn-action" onclick="fitPagePrev()">Prev</button>
+        <span id="fittings-pageinfo" style="color:#808fa6;font-size:0.85rem"></span>
+        <button class="btn-action" onclick="fitPageNext()">Next</button>
+      </div>
     </div>
 
     <!-- Mail view -->
@@ -1220,7 +1252,7 @@
 
   function showView(view) {
     currentView = view;
-    ['contracts', 'projects', 'structures', 'fleet', 'member', 'admin', 'mail'].forEach(v => {
+    ['contracts', 'projects', 'structures', 'fleet', 'member', 'fittings', 'admin', 'mail'].forEach(v => {
       document.getElementById('view-' + v).classList.toggle('hidden', view !== v);
       document.getElementById('btn-' + v).classList.toggle('active', view === v);
     });
@@ -1234,6 +1266,7 @@
     if (view === 'structures') loadStructures();
     if (view === 'fleet') loadFleet();
     if (view === 'member') loadMember();
+    if (view === 'fittings') loadFittings();
     if (view === 'admin') loadAdmin();
     if (view === 'mail') loadMail();
   }
@@ -3747,6 +3780,314 @@
       if (data) sessionStorage.setItem('me-contracts', JSON.stringify(data));
       renderMemberContracts(data, err);
     }, 'contracts-error');
+  }
+
+  // ── Fittings ────────────────────────────────────────────────────────────────
+  let fittingsData = [];
+  let fitFilter = '';
+  let fitSort = { key: 'name', dir: 1 };   // key: name|ship; dir: 1 asc / -1 desc
+  let fitPage = 0;
+  const FIT_PAGE_SIZE = 24;
+
+  function setFitFilter(v) { fitFilter = v.trim().toLowerCase(); fitPage = 0; renderFittingsList(); }
+  function setFitSort(key) {
+    if (fitSort.key === key) fitSort.dir *= -1; else fitSort = { key, dir: 1 };
+    fitPage = 0; renderFittingsList();
+  }
+  function fitPagePrev() { if (fitPage > 0) { fitPage--; renderFittingsList(); } }
+  function fitPageNext() { fitPage++; renderFittingsList(); }   // clamped in render
+
+  function fittingsView() {
+    let arr = fittingsData;
+    if (fitFilter) {
+      arr = arr.filter(f =>
+        (f.name || '').toLowerCase().includes(fitFilter) ||
+        (f.ship_name || '').toLowerCase().includes(fitFilter));
+    }
+    const key = fitSort.key === 'ship' ? 'ship_name' : 'name';
+    return arr.slice().sort((a, b) => fitSort.dir *
+      String(a[key] || '').localeCompare(String(b[key] || ''), undefined, { sensitivity: 'base' }));
+  }
+
+  async function loadFittings() {
+    const grid = document.getElementById('fittings-grid');
+    hideError('fittings-error');
+    grid.innerHTML = '<div style="color:#66768c;padding:1rem">Loading fittings…</div>';
+    try {
+      const r = await fetch('/api/me/fittings');
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        showError('fittings-error', d.detail || 'Could not load fittings.');
+        grid.innerHTML = '';
+        return;
+      }
+      const data = await r.json();
+      fittingsData = data.fittings || [];
+      renderFittingsList();
+    } catch {
+      showError('fittings-error', 'Network error loading fittings.');
+      grid.innerHTML = '';
+    }
+  }
+
+  function renderFittingsList() {
+    const grid = document.getElementById('fittings-grid');
+    const view = fittingsView();
+    const total = view.length;
+    const pages = Math.max(1, Math.ceil(total / FIT_PAGE_SIZE));
+    fitPage = Math.min(Math.max(fitPage, 0), pages - 1);
+    const pageItems = view.slice(fitPage * FIT_PAGE_SIZE, fitPage * FIT_PAGE_SIZE + FIT_PAGE_SIZE);
+
+    const labels = { name: 'Name', ship: 'Ship' };
+    ['name', 'ship'].forEach(k => {
+      const b = document.getElementById('fit-sort-' + k);
+      if (!b) return;
+      b.classList.toggle('active', fitSort.key === k);
+      b.textContent = labels[k] + (fitSort.key === k ? (fitSort.dir === 1 ? ' ▲' : ' ▼') : '');
+    });
+    const countEl = document.getElementById('fittings-count');
+    if (countEl) countEl.textContent =
+      fitFilter ? `${total} of ${fittingsData.length} fits` : `${total} fits`;
+    const pager = document.getElementById('fittings-pager');
+    const pageInfo = document.getElementById('fittings-pageinfo');
+    if (pageInfo) pageInfo.textContent = total ? `Page ${fitPage + 1} of ${pages}` : '';
+    if (pager) pager.style.display = total > FIT_PAGE_SIZE ? 'flex' : 'none';
+
+    if (!fittingsData.length) {
+      grid.innerHTML = '<div style="color:#66768c;padding:1rem">No fittings found.</div>';
+      return;
+    }
+    if (!total) {
+      grid.innerHTML = '<div style="color:#66768c;padding:1rem">No fits match your search.</div>';
+      return;
+    }
+    grid.innerHTML = pageItems.map(f => `
+      <div class="card" style="display:flex;gap:0.85rem;align-items:center;cursor:pointer"
+           onclick="openFitDetail(${f.fitting_id})">
+        <img src="https://images.evetech.net/types/${f.ship_type_id}/render?size=64"
+             alt="" width="48" height="48" style="border-radius:6px;flex:none">
+        <div style="min-width:0">
+          <div style="font-weight:600;color:#f8fafc;white-space:nowrap;overflow:hidden;
+                      text-overflow:ellipsis">${escHtml(f.name || 'Fitting')}</div>
+          <div style="font-size:0.8rem;color:#808fa6">${escHtml(f.ship_name || '')}</div>
+          <div style="font-size:0.72rem;color:#66768c">${(f.items || []).length} items</div>
+        </div>
+      </div>`).join('');
+  }
+
+  // ESI fitting item flag -> display group key.
+  function fitSlotOf(flag) {
+    if (flag.startsWith('HiSlot')) return 'high';
+    if (flag.startsWith('MedSlot')) return 'mid';
+    if (flag.startsWith('LoSlot')) return 'low';
+    if (flag.startsWith('RigSlot')) return 'rig';
+    if (flag.startsWith('SubSystemSlot')) return 'subsystem';
+    if (flag === 'DroneBay') return 'drones';
+    return 'cargo';
+  }
+
+  const FIT_GROUP_LABELS = [
+    ['high', 'High Slots'], ['mid', 'Mid Slots'], ['low', 'Low Slots'],
+    ['rig', 'Rigs'], ['subsystem', 'Subsystems'],
+    ['drones', 'Drone Bay'], ['cargo', 'Cargo'],
+  ];
+
+  // Item names + EFT are resolved lazily on open and cached on the fit object
+  // (fit._detail), so reopening a fit makes no further requests.
+  async function openFitDetail(fittingId) {
+    const fit = fittingsData.find(f => f.fitting_id === fittingId);
+    if (!fit) return;
+    showModal(fit.name || 'Fitting',
+      '<div style="color:#66768c;text-align:center;padding:1.5rem">Loading fit…</div>');
+    if (!fit._detail) {
+      try {
+        const r = await fetch('/api/me/fittings/detail', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ship_type_id: fit.ship_type_id, name: fit.name,
+                                 items: fit.items }) });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          setModalBody('<div class="banner show">' +
+            escHtml(d.detail || 'Could not load fit details.') + '</div>');
+          return;
+        }
+        fit._detail = await r.json();
+      } catch {
+        setModalBody('<div class="banner show">Network error loading fit details.</div>');
+        return;
+      }
+    }
+    setModalBody(fitDetailBody(fit));
+  }
+
+  function fitDetailBody(fit) {
+    const groups = {};
+    (fit._detail.items || []).forEach(it => {
+      const g = fitSlotOf(it.flag || '');
+      (groups[g] = groups[g] || []).push(it);
+    });
+    const sections = FIT_GROUP_LABELS.filter(([k]) => groups[k]).map(([k, label]) => {
+      const rows = groups[k].map(it => `
+        <div style="display:flex;justify-content:space-between;gap:1rem;
+                    padding:0.25rem 0;border-bottom:1px solid #1e2130">
+          <span>${itemName(it.type_id, it.name)}</span>
+          <span style="color:#66768c;flex:none">${it.quantity > 1 ? '×' + it.quantity : ''}</span>
+        </div>`).join('');
+      return `<div style="margin-bottom:0.9rem">
+          <div class="card-title" style="margin-bottom:0.4rem">${label}</div>${rows}</div>`;
+    }).join('');
+    return `
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end;flex-wrap:wrap;
+                  margin-bottom:0.75rem">
+        <button class="btn-action" onclick="exportFitEft(${fit.fitting_id})">Export EFT</button>
+        <button class="btn-action" onclick="openRenameFitting(${fit.fitting_id})">Rename</button>
+        <button class="btn-action" id="fit-dup-btn"
+                onclick="duplicateFit(${fit.fitting_id})">Duplicate</button>
+        <button class="btn-action" id="fit-del-btn"
+                onclick="confirmDeleteFit(${fit.fitting_id})">Delete</button>
+      </div>
+      <div id="fit-detail-err" class="banner"></div>
+      ${sections || '<div style="color:#66768c">No items.</div>'}`;
+  }
+
+  function exportFitEft(fittingId) {
+    const fit = fittingsData.find(f => f.fitting_id === fittingId);
+    if (fit && fit._detail) renderFittingModal(fit._detail.eft);  // EFT <pre> + Copy
+  }
+
+  function confirmDeleteFit(fittingId) {
+    const btn = document.getElementById('fit-del-btn');
+    if (btn.dataset.armed !== '1') {
+      btn.dataset.armed = '1';
+      btn.textContent = 'Confirm delete?';
+      btn.style.color = '#f87171';
+      setTimeout(() => {
+        if (btn) { btn.dataset.armed = ''; btn.textContent = 'Delete'; btn.style.color = ''; }
+      }, 3000);
+      return;
+    }
+    doDeleteFit(fittingId);
+  }
+
+  async function doDeleteFit(fittingId) {
+    const err = document.getElementById('fit-detail-err');
+    try {
+      const r = await fetch('/api/me/fittings/' + fittingId, { method: 'DELETE' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        if (err) { err.textContent = d.detail || 'Delete failed.'; err.classList.add('show'); }
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      if (err) { err.textContent = 'Network error.'; err.classList.add('show'); }
+    }
+  }
+
+  async function duplicateFit(fittingId) {
+    const btn = document.getElementById('fit-dup-btn');
+    const err = document.getElementById('fit-detail-err');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch('/api/me/fittings/' + fittingId + '/duplicate', { method: 'POST' });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        if (err) { err.textContent = d.detail || 'Duplicate failed.'; err.classList.add('show'); }
+        if (btn) btn.disabled = false;
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      if (err) { err.textContent = 'Network error.'; err.classList.add('show'); }
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function openRenameFitting(fittingId) {
+    const fit = fittingsData.find(f => f.fitting_id === fittingId);
+    if (!fit) return;
+    const body = `
+      <div id="fit-rename-err" class="banner"></div>
+      <label style="display:block;color:#808fa6;font-size:0.8rem;margin-bottom:0.4rem">
+        New fitting name</label>
+      <input id="fit-rename-input" type="text" maxlength="50"
+             value="${escAttr(fit.name || '')}"
+             style="width:100%;padding:0.5rem;background:#0f1117;border:1px solid #2d3348;
+                    border-radius:6px;color:#f8fafc">
+      <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn-action" onclick="submitRenameFitting(this, ${fittingId})">Save</button>
+      </div>`;
+    showModal('Rename Fitting', body);
+    const input = document.getElementById('fit-rename-input');
+    if (input) input.focus();
+  }
+
+  async function submitRenameFitting(btn, fittingId) {
+    const err = document.getElementById('fit-rename-err');
+    const name = (document.getElementById('fit-rename-input') || {}).value || '';
+    err.classList.remove('show'); err.textContent = '';
+    if (!name.trim()) {
+      err.textContent = 'Name required.'; err.classList.add('show');
+      return;
+    }
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/me/fittings/' + fittingId + '/rename', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        err.textContent = d.detail || 'Rename failed.'; err.classList.add('show');
+        btn.disabled = false;
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      err.textContent = 'Network error.'; err.classList.add('show');
+      btn.disabled = false;
+    }
+  }
+
+  function openImportFitting() {
+    const body = `
+      <div id="fit-import-err" class="banner"></div>
+      <p style="color:#808fa6;font-size:0.82rem;margin:0 0 0.5rem">
+        Paste an EFT-format fitting (starts with <code>[Ship, Name]</code>).</p>
+      <textarea id="fit-import-text" class="fit-eft"
+                style="width:100%;height:240px;resize:vertical"
+                placeholder="[Rifter, My Rifter]&#10;Damage Control II&#10;..."></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:0.75rem">
+        <button class="btn-action" onclick="submitImportFitting(this)">Save Fitting</button>
+      </div>`;
+    showModal('Import EFT Fitting', body);
+    const ta = document.getElementById('fit-import-text');
+    if (ta) ta.focus();
+  }
+
+  async function submitImportFitting(btn) {
+    const err = document.getElementById('fit-import-err');
+    const eft = (document.getElementById('fit-import-text') || {}).value || '';
+    err.classList.remove('show'); err.textContent = '';
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/me/fittings/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eft }) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        err.textContent = d.detail || 'Import failed.'; err.classList.add('show');
+        btn.disabled = false;
+        return;
+      }
+      closeModal();
+      loadFittings();
+    } catch {
+      err.textContent = 'Network error.'; err.classList.add('show');
+      btn.disabled = false;
+    }
   }
 
   async function fetchSection(url, renderer, errorId) {

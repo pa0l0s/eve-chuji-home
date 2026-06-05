@@ -29,12 +29,15 @@ from esi import (
     get_location_name, get_location_info, get_structure_info,
     get_type_info, get_group_info, get_system_info, get_server_status,
     open_contract_in_client, open_information_in_client, open_market_in_client,
-    resolve_names, resolve_type_ids, get_jita_buy_max,
+    resolve_names, resolve_type_ids, resolve_type_names, get_jita_buy_max,
     MARKET_TARGET_RATIO, PRICE_DIFF_THRESHOLD,
     get_mail_headers, get_mail, get_mail_labels, get_mailing_lists,
     set_mail, delete_mail, create_mail_label, delete_mail_label,
     send_mail, resolve_recipient_ids, get_contacts,
     parse_fitting_link, get_fitting_type_meta, build_eft,
+    list_character_fittings, create_character_fitting, delete_character_fitting,
+    eft_from_esi_fitting, parse_eft, eft_to_esi_fitting,
+    fitting_to_create_payload, next_copy_name,
 )
 from db import cache_structure_name
 
@@ -51,6 +54,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def _no_cache_html(request, call_next):
+    """The SPA shell (index.html) must always revalidate, otherwise browsers
+    heuristically cache it and users run stale frontend code after a deploy."""
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
 
 BACKGROUNDS_DIR = os.path.join(os.path.dirname(__file__), "static", "backgrounds")
 _BG_EXTS = (".jpg", ".jpeg", ".png", ".webp")
@@ -88,8 +102,8 @@ async def open_contract(contract_id: int, session: str | None = Cookie(None)):
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Missing scope: esi-ui.open_window.v1")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"ok": True}
 
 
@@ -105,8 +119,8 @@ async def open_information(target_id: int, session: str | None = Cookie(None)):
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Missing scope: esi-ui.open_window.v1")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"ok": True}
 
 
@@ -122,8 +136,8 @@ async def open_market(type_id: int, session: str | None = Cookie(None)):
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Missing scope: esi-ui.open_window.v1")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"ok": True}
 
 
@@ -271,8 +285,8 @@ async def fleet_current(session: str | None = Cookie(None)):
 
     try:
         fleet_info = await get_character_fleet(character_id, access_token)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
 
     if not fleet_info:
         return {"in_fleet": False}
@@ -304,8 +318,8 @@ async def fleet_current(session: str | None = Cookie(None)):
             get_fleet_wings(fleet_info["fleet_id"], access_token),
             get_fleet_info(fleet_info["fleet_id"], access_token),
         )
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
 
     saved = await database.load_fleet_positions(character_id)
     names = await resolve_names([m["character_id"] for m in members])
@@ -967,8 +981,8 @@ async def project_contributors(project_id: str, session: str | None = Cookie(Non
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Insufficient corporation roles")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"project_id": project_id, "contributors": contributors}
 
 
@@ -1379,8 +1393,8 @@ async def my_wallet(session: str | None = Cookie(None)):
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Missing scope: read_character_wallet")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
 
 
 @app.get("/api/me/pvp-income")
@@ -1426,8 +1440,8 @@ async def my_contracts(session: str | None = Cookie(None)):
         if e.response.status_code == 403:
             raise HTTPException(status_code=403, detail="Missing scope: read_character_contracts")
         raise HTTPException(status_code=502, detail="ESI unavailable")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
 
     now = datetime.now(timezone.utc)
     char_ids = []
@@ -1501,8 +1515,8 @@ async def my_mail(labels: str | None = None, last_mail_id: int | None = None,
                                          labels=label_ids, last_mail_id=last_mail_id)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     await _enrich_mail_names(headers)
     return headers
 
@@ -1518,8 +1532,8 @@ async def my_mail_labels(session: str | None = Cookie(None)):
         )
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"labels": labels.get("labels", []),
             "total_unread_count": labels.get("total_unread_count", 0),
             "lists": lists}
@@ -1536,8 +1550,8 @@ async def my_mail_unread(session: str | None = Cookie(None)):
         labels = await get_mail_labels(character_id, access_token)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     inbox = next((l for l in labels.get("labels", [])
                   if l.get("label_id") == INBOX_LABEL_ID), {})
     count = inbox.get("unread_count", 0)
@@ -1556,8 +1570,8 @@ async def my_mail_contacts(session: str | None = Cookie(None)):
         contacts = await get_contacts(character_id, access_token)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     mailable = [c for c in contacts if c.get("contact_type") in _MAILABLE_CONTACT_TYPES]
     names = await resolve_names([c["contact_id"] for c in mailable])
     out = [{"recipient_id": c["contact_id"],
@@ -1588,8 +1602,8 @@ async def my_mail_create_label(body: dict, session: str | None = Cookie(None)):
         label_id = await create_mail_label(character_id, access_token, name, color)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"label_id": label_id}
 
 
@@ -1601,8 +1615,8 @@ async def my_mail_delete_label(label_id: int, session: str | None = Cookie(None)
         await delete_mail_label(character_id, access_token, label_id)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     return {"ok": True}
 
 
@@ -1624,8 +1638,8 @@ async def my_mail_send(body: dict, session: str | None = Cookie(None)):
             raise HTTPException(status_code=403,
                 detail="Mail scope not granted — log out and back in to enable Mail.")
         raise HTTPException(status_code=502, detail=f"Send failed: {e.response.text}")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     _mail_unread_cache.pop(character_id, None)
     return {"mail_id": mail_id}
 
@@ -1640,8 +1654,8 @@ async def my_mail_update(mail_id: int, body: dict, session: str | None = Cookie(
         await set_mail(character_id, access_token, mail_id, read=read, labels=label_ids)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     _mail_unread_cache.pop(character_id, None)
     _mail_body_cache.pop((character_id, mail_id), None)
     return {"ok": True}
@@ -1655,8 +1669,8 @@ async def my_mail_delete(mail_id: int, session: str | None = Cookie(None)):
         await delete_mail(character_id, access_token, mail_id)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     _mail_unread_cache.pop(character_id, None)
     _mail_body_cache.pop((character_id, mail_id), None)
     return {"ok": True}
@@ -1673,8 +1687,8 @@ async def my_mail_detail(mail_id: int, session: str | None = Cookie(None)):
         mail = await get_mail(character_id, access_token, mail_id)
     except httpx.HTTPStatusError as e:
         raise _mail_scope_http(e)
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="ESI unavailable")
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
     await _enrich_mail_names([mail])
     _mail_body_cache[(character_id, mail_id)] = mail
     return mail
@@ -1700,6 +1714,212 @@ async def my_fitting_eft(body: dict, session: str | None = Cookie(None)):
     items = [{**m, "qty": qty} for m, (tid, qty) in zip(metas, pairs)]
     ship_name = ship_info.get("name", f"Type #{ship_id}")
     return {"eft": build_eft(ship_name, fit_name, items), "ship": ship_name}
+
+
+# Statuses that mean "EVE's API is temporarily busy/overloaded" → tell the user to retry.
+_ESI_BUSY = {420, 429, 500, 502, 503, 504, 520, 522, 524, 529}
+_ESI_BUSY_MSG = "EVE's API is busy or overloaded right now. Please wait a moment and try again."
+
+
+def esi_http_exception(e: httpx.HTTPError, scope: str | None = None) -> HTTPException:
+    """Map an httpx error from an ESI call to a user-facing HTTPException.
+    Overload/5xx and network/timeout errors become a clear 503 'busy, retry'
+    message; a 403 becomes a missing-scope message when a scope is given."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = e.response.status_code
+        if code == 403 and scope:
+            return HTTPException(status_code=403, detail=f"Missing scope: {scope}")
+        if code in _ESI_BUSY:
+            return HTTPException(status_code=503, detail=_ESI_BUSY_MSG)
+        return HTTPException(status_code=502, detail="EVE API error. Please try again shortly.")
+    return HTTPException(status_code=503, detail=_ESI_BUSY_MSG)
+
+
+def _fit_http_error(e: httpx.HTTPError, scope: str) -> HTTPException:
+    return esi_http_exception(e, scope)
+
+
+# ── Fittings write-through overlay ─────────────────────────────────────────────
+# ESI caches GET /characters/{id}/fittings/ for ~5 min and does NOT invalidate it
+# on create/delete, so a user's own writes don't show up (or deleted fits linger)
+# until the cache expires. We keep a tiny in-memory overlay per character — fits
+# just added and ids just removed — merge it into each list response, and let it
+# self-prune once ESI's list catches up. Single gunicorn worker → in-memory is fine.
+_fit_overlay: dict[int, dict] = {}
+_FIT_OVERLAY_TTL = 600
+
+
+def _overlay(character_id: int) -> dict:
+    o = _fit_overlay.get(character_id)
+    if o is None or time.time() - o["ts"] > _FIT_OVERLAY_TTL:
+        o = {"add": {}, "remove": set(), "ts": time.time()}
+        _fit_overlay[character_id] = o
+    return o
+
+
+def _overlay_add(character_id: int, fit: dict) -> None:
+    o = _overlay(character_id)
+    o["add"][fit["fitting_id"]] = fit
+    o["remove"].discard(fit["fitting_id"])
+    o["ts"] = time.time()
+
+
+def _overlay_remove(character_id: int, fitting_id: int) -> None:
+    o = _overlay(character_id)
+    o["add"].pop(fitting_id, None)
+    o["remove"].add(fitting_id)
+    o["ts"] = time.time()
+
+
+def _apply_overlay(character_id: int, fits: list[dict]) -> list[dict]:
+    o = _fit_overlay.get(character_id)
+    if not o:
+        return fits
+    esi_ids = {f["fitting_id"] for f in fits}
+    for fid in list(o["add"]):           # ESI now lists it → stop overlaying
+        if fid in esi_ids:
+            o["add"].pop(fid)
+    for fid in list(o["remove"]):        # ESI dropped it → stop overlaying
+        if fid not in esi_ids:
+            o["remove"].discard(fid)
+    if not o["add"] and not o["remove"]:
+        _fit_overlay.pop(character_id, None)
+        return fits
+    merged = [f for f in fits if f["fitting_id"] not in o["remove"]]
+    have = {f["fitting_id"] for f in merged}
+    for fid, fit in o["add"].items():
+        if fid not in have:
+            merged.append(fit)
+    return merged
+
+
+@app.get("/api/me/fittings")
+async def my_fittings(session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        token = await get_valid_token(character_id)
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    fits = _apply_overlay(character_id, fits)   # mask ESI's ~5-min list cache
+    # List stays cheap: resolve only ship names (a small, deduped, cached set).
+    # Per-item names + EFT are resolved lazily by /api/me/fittings/detail when a
+    # fit's popup is opened, so opening the list never fans out to every type.
+    name_map = await resolve_type_names({f["ship_type_id"] for f in fits})
+    for f in fits:
+        f["ship_name"] = name_map.get(f["ship_type_id"], f"Type #{f['ship_type_id']}")
+    return {"fittings": fits}
+
+
+@app.post("/api/me/fittings/detail")
+async def fitting_detail(body: dict, session: str | None = Cookie(None)):
+    """Resolve item names + build EFT for a single fit the client already holds
+    (from the list). Auth-only — no ESI write — and type names come from the
+    cached per-type lookup, so reopening fits that share modules costs nothing."""
+    await get_current_character_id(session)
+    ship_type_id = body.get("ship_type_id")
+    items = body.get("items") or []
+    ids = {it["type_id"] for it in items}
+    if ship_type_id:
+        ids.add(ship_type_id)
+    name_map = await resolve_type_names(ids)
+    enriched = [{**it, "name": name_map.get(it["type_id"], f"Type #{it['type_id']}")}
+                for it in items]
+    fitting = {"name": body.get("name") or "Fitting",
+               "ship_type_id": ship_type_id, "items": items}
+    return {
+        "items": enriched,
+        "eft": eft_from_esi_fitting(fitting, name_map),
+        "ship_name": name_map.get(ship_type_id, f"Type #{ship_type_id}"),
+    }
+
+
+@app.post("/api/me/fittings/import")
+async def import_fitting(body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        parsed = parse_eft(body.get("eft") or "")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Not a valid EFT fit")
+    try:
+        payload = await eft_to_esi_fitting(parsed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except httpx.HTTPError as e:
+        raise esi_http_exception(e)
+    try:
+        token = await get_valid_token(character_id)
+        created = await create_character_fitting(character_id, token, payload)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    fit_id = created.get("fitting_id")
+    _overlay_add(character_id, {**payload, "fitting_id": fit_id})
+    return {"fitting_id": fit_id, "name": payload["name"]}
+
+
+@app.delete("/api/me/fittings/{fitting_id}")
+async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        token = await get_valid_token(character_id)
+        await delete_character_fitting(character_id, token, fitting_id)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    _overlay_remove(character_id, fitting_id)
+    return {"ok": True}
+
+
+@app.post("/api/me/fittings/{fitting_id}/duplicate")
+async def duplicate_fitting(fitting_id: int, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    try:
+        token = await get_valid_token(character_id)
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    src = next((f for f in fits if f["fitting_id"] == fitting_id), None)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Fitting not found")
+    name = next_copy_name(src.get("name") or "Fitting", {f.get("name") for f in fits})
+    payload = fitting_to_create_payload(src, name)
+    try:
+        created = await create_character_fitting(character_id, token, payload)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    fit_id = created.get("fitting_id")
+    _overlay_add(character_id, {**payload, "fitting_id": fit_id})
+    return {"fitting_id": fit_id, "name": name}
+
+
+@app.post("/api/me/fittings/{fitting_id}/rename")
+async def rename_fitting(fitting_id: int, body: dict, session: str | None = Cookie(None)):
+    character_id = await get_current_character_id(session)
+    new_name = (body.get("name") or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Name required")
+    try:
+        token = await get_valid_token(character_id)
+        fits = await list_character_fittings(character_id, token)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.read_fittings.v1")
+    src = next((f for f in fits if f["fitting_id"] == fitting_id), None)
+    if src is None:
+        raise HTTPException(status_code=404, detail="Fitting not found")
+    # Create the renamed copy FIRST; only delete the original once it exists.
+    payload = fitting_to_create_payload(src, new_name)
+    try:
+        created = await create_character_fitting(character_id, token, payload)
+    except httpx.HTTPError as e:
+        raise _fit_http_error(e, "esi-fittings.write_fittings.v1")
+    new_id = created.get("fitting_id")
+    _overlay_add(character_id, {**payload, "fitting_id": new_id})
+    try:
+        await delete_character_fitting(character_id, token, fitting_id)
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502,
+                            detail="Renamed copy created, but the original could not be removed")
+    _overlay_remove(character_id, fitting_id)
+    return {"fitting_id": new_id, "name": new_name[:50]}
 
 
 # ── Static files (must be last) ───────────────────────────────────────────────
