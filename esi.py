@@ -986,9 +986,9 @@ async def create_character_fitting(character_id: int, access_token: str, fitting
 
 
 async def delete_character_fitting(character_id: int, access_token: str, fitting_id: int) -> None:
-    """DELETE one saved fitting."""
+    """DELETE one saved fitting. No trailing slash — ESI's DELETE route 500s with one."""
     async with httpx.AsyncClient() as client:
-        r = await client.delete(f"{_FITTINGS_BASE}/{character_id}/fittings/{fitting_id}/",
+        r = await client.delete(f"{_FITTINGS_BASE}/{character_id}/fittings/{fitting_id}",
                                headers=_fit_headers(access_token))
         r.raise_for_status()
 

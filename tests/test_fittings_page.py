@@ -321,7 +321,7 @@ async def test_import_fitting_rejects_junk(client):
 
 @respx.mock
 async def test_delete_fitting_happy_path(client):
-    respx.delete(f"{FITS}/7/").mock(return_value=Response(204))
+    respx.delete(f"{FITS}/7").mock(return_value=Response(204))
     cookies = await _auth_cookie()
     r = await client.delete("/api/me/fittings/7", cookies=cookies)
     assert r.status_code == 200
@@ -399,7 +399,7 @@ async def test_rename_fitting_happy_path(client):
         "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}],
     }]))
     create = respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 90}))
-    delete = respx.delete(f"{FITS}/5/").mock(return_value=Response(204))
+    delete = respx.delete(f"{FITS}/5").mock(return_value=Response(204))
     cookies = await _auth_cookie()
     r = await client.post("/api/me/fittings/5/rename",
                           json={"name": "Better Rifter"}, cookies=cookies)
@@ -441,7 +441,7 @@ async def test_rename_fitting_delete_failure_502(client):
         "fitting_id": 5, "name": "Rifter", "description": "", "ship_type_id": 587,
         "items": [{"type_id": 100, "quantity": 1, "flag": "LoSlot0"}]}]))
     respx.post(f"{FITS}/").mock(return_value=Response(200, json={"fitting_id": 90}))
-    respx.delete(f"{FITS}/5/").mock(return_value=Response(500, json={}))
+    respx.delete(f"{FITS}/5").mock(return_value=Response(500, json={}))
     cookies = await _auth_cookie()
     r = await client.post("/api/me/fittings/5/rename", json={"name": "New"}, cookies=cookies)
     assert r.status_code == 502
