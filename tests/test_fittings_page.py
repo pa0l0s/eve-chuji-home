@@ -303,3 +303,8 @@ async def test_delete_fitting_happy_path(client):
 async def test_delete_fitting_requires_auth(client):
     r = await client.delete("/api/me/fittings/7")
     assert r.status_code == 401
+
+
+async def test_import_fitting_requires_auth(client):
+    r = await client.post("/api/me/fittings/import", json={"eft": "[Rifter, X]"})
+    assert r.status_code == 401

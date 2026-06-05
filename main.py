@@ -1707,8 +1707,8 @@ async def my_fitting_eft(body: dict, session: str | None = Cookie(None)):
 @app.get("/api/me/fittings")
 async def my_fittings(session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
-    token = await get_valid_token(character_id)
     try:
+        token = await get_valid_token(character_id)
         fits = await list_character_fittings(character_id, token)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 403:
@@ -1731,7 +1731,6 @@ async def my_fittings(session: str | None = Cookie(None)):
 @app.post("/api/me/fittings/import")
 async def import_fitting(body: dict, session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
-    token = await get_valid_token(character_id)
     try:
         parsed = parse_eft(body.get("eft") or "")
     except ValueError:
@@ -1743,6 +1742,7 @@ async def import_fitting(body: dict, session: str | None = Cookie(None)):
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="ESI unavailable")
     try:
+        token = await get_valid_token(character_id)
         created = await create_character_fitting(character_id, token, payload)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 403:
@@ -1757,8 +1757,8 @@ async def import_fitting(body: dict, session: str | None = Cookie(None)):
 @app.delete("/api/me/fittings/{fitting_id}")
 async def remove_fitting(fitting_id: int, session: str | None = Cookie(None)):
     character_id = await get_current_character_id(session)
-    token = await get_valid_token(character_id)
     try:
+        token = await get_valid_token(character_id)
         await delete_character_fitting(character_id, token, fitting_id)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 403:
